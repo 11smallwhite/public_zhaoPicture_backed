@@ -36,7 +36,7 @@ class ZhaoPictureBackedApplicationTests {
     public void downloadPicture(){
         File tempFile = FileUtil.createTempFile();
         String key =  String.format("/public/1986704662206394370.logo.avif");
-        ObjectMetadata picturetoFile = cosService.getPicturetoFile(key, tempFile);
+        cosService.deletePicture( key);
     }
 
 
