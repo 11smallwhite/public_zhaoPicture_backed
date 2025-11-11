@@ -76,6 +76,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 log.warn("图片不存在");
                 ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片不存在");
             }
+            //如果图片存在于数据库，就说明图片也存在在对象存储上，需要进行删除
+            String key = getKey(oldPicture.getUserId(),oldPicture.getpName(),oldPicture.getpFormat());
+
+            cosService.deletePicture(key);
         }
         //校验图片文件
         vailPictureFile(multipartFile);
@@ -161,7 +165,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     public PictureInfoResult UploadPictureByStream(MultipartFile multipartFile,Long userId) {
         log.info("执行方法UploadPictureByStream,参数为{}和{}", multipartFile);
         String originalFilename = multipartFile.getOriginalFilename();
-        String key = getKey(originalFilename,userId);
+        String name = FileUtil.mainName(originalFilename);
+        String suffix = FileUtil.getSuffix(originalFilename);
+        String key = getKey(userId,name,suffix);
         PictureInfoResult pictureInfoResult = null;
         try{
             //获取到文件的流
@@ -232,7 +238,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         //todo
         //3.删除对象存储数据
         //得到要删除数据的key
-        String key = getKey(picture.getpName()+"."+picture.getpFormat().toLowerCase(),userId);
+        String key = getKey(userId, picture.getpName(), picture.getpFormat());
         try {
             log.info("删除对象存储里的图片信息");
             cosService.deletePicture(key);
@@ -328,8 +334,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureVO;
     }
 
-    public String getKey(String name,Long userId){
-        return String.format("/public/%s.%s",userId,name);
+    public String getKey(Long userId,String name,String format){
+        return String.format("/public/%s.%s.%s",userId,name,format);
     }
 
     // 字段名映射方法
