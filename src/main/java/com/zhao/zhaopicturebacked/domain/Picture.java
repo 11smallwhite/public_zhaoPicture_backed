@@ -14,7 +14,7 @@ public class Picture implements Serializable {
     /**
      * id
      */
-    @TableId(value = "id", type = IdType.ASSIGN_ID)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
     /**
@@ -104,8 +104,33 @@ public class Picture implements Serializable {
     /**
      * 是否删除
      */
+    @TableLogic
     @TableField(value = "is_delete")
     private Integer isDelete;
+
+    /**
+     * 审核状态 0-未审核，-1-审核拒绝，1-审核通过
+     */
+    @TableField(value = "audit_status")
+    private Integer auditStatus;
+
+    /**
+     * 审核信息
+     */
+    @TableField(value = "audit_msg")
+    private String auditMsg;
+
+    /**
+     * 审核人 id
+     */
+    @TableField(value = "auditor_id")
+    private Long auditorId;
+
+    /**
+     * 审核时间
+     */
+    @TableField(value = "audit_time")
+    private Date auditTime;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
@@ -274,8 +299,8 @@ public class Picture implements Serializable {
     /**
      * 创建用户 id
      */
-    public void setUserId(Long userid) {
-        this.userId = userid;
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     /**
@@ -334,6 +359,62 @@ public class Picture implements Serializable {
         this.isDelete = isDelete;
     }
 
+    /**
+     * 审核状态 0-未审核，-1-审核拒绝，1-审核通过
+     */
+    public Integer getAuditStatus() {
+        return auditStatus;
+    }
+
+    /**
+     * 审核状态 0-未审核，-1-审核拒绝，1-审核通过
+     */
+    public void setAuditStatus(Integer auditStatus) {
+        this.auditStatus = auditStatus;
+    }
+
+    /**
+     * 审核信息
+     */
+    public String getAuditMsg() {
+        return auditMsg;
+    }
+
+    /**
+     * 审核信息
+     */
+    public void setAuditMsg(String auditMsg) {
+        this.auditMsg = auditMsg;
+    }
+
+    /**
+     * 审核人 id
+     */
+    public Long getAuditorId() {
+        return auditorId;
+    }
+
+    /**
+     * 审核人 id
+     */
+    public void setAuditorId(Long auditorId) {
+        this.auditorId = auditorId;
+    }
+
+    /**
+     * 审核时间
+     */
+    public Date getAuditTime() {
+        return auditTime;
+    }
+
+    /**
+     * 审核时间
+     */
+    public void setAuditTime(Date auditTime) {
+        this.auditTime = auditTime;
+    }
+
     @Override
     public boolean equals(Object that) {
         if (this == that) {
@@ -361,7 +442,11 @@ public class Picture implements Serializable {
             && (this.getCreateTime() == null ? other.getCreateTime() == null : this.getCreateTime().equals(other.getCreateTime()))
             && (this.getEditTime() == null ? other.getEditTime() == null : this.getEditTime().equals(other.getEditTime()))
             && (this.getUpdateTime() == null ? other.getUpdateTime() == null : this.getUpdateTime().equals(other.getUpdateTime()))
-            && (this.getIsDelete() == null ? other.getIsDelete() == null : this.getIsDelete().equals(other.getIsDelete()));
+            && (this.getIsDelete() == null ? other.getIsDelete() == null : this.getIsDelete().equals(other.getIsDelete()))
+            && (this.getAuditStatus() == null ? other.getAuditStatus() == null : this.getAuditStatus().equals(other.getAuditStatus()))
+            && (this.getAuditMsg() == null ? other.getAuditMsg() == null : this.getAuditMsg().equals(other.getAuditMsg()))
+            && (this.getAuditorId() == null ? other.getAuditorId() == null : this.getAuditorId().equals(other.getAuditorId()))
+            && (this.getAuditTime() == null ? other.getAuditTime() == null : this.getAuditTime().equals(other.getAuditTime()));
     }
 
     @Override
@@ -384,6 +469,10 @@ public class Picture implements Serializable {
         result = prime * result + ((getEditTime() == null) ? 0 : getEditTime().hashCode());
         result = prime * result + ((getUpdateTime() == null) ? 0 : getUpdateTime().hashCode());
         result = prime * result + ((getIsDelete() == null) ? 0 : getIsDelete().hashCode());
+        result = prime * result + ((getAuditStatus() == null) ? 0 : getAuditStatus().hashCode());
+        result = prime * result + ((getAuditMsg() == null) ? 0 : getAuditMsg().hashCode());
+        result = prime * result + ((getAuditorId() == null) ? 0 : getAuditorId().hashCode());
+        result = prime * result + ((getAuditTime() == null) ? 0 : getAuditTime().hashCode());
         return result;
     }
 
@@ -404,11 +493,15 @@ public class Picture implements Serializable {
         sb.append(", pHeight=").append(pHeight);
         sb.append(", pScale=").append(pScale);
         sb.append(", pFormat=").append(pFormat);
-        sb.append(", userid=").append(userId);
+        sb.append(", userId=").append(userId);
         sb.append(", createTime=").append(createTime);
         sb.append(", editTime=").append(editTime);
         sb.append(", updateTime=").append(updateTime);
         sb.append(", isDelete=").append(isDelete);
+        sb.append(", auditStatus=").append(auditStatus);
+        sb.append(", auditMsg=").append(auditMsg);
+        sb.append(", auditorId=").append(auditorId);
+        sb.append(", auditTime=").append(auditTime);
         sb.append(", serialVersionUID=").append(serialVersionUID);
         sb.append("]");
         return sb.toString();

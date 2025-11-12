@@ -21,6 +21,10 @@
             <result property="editTime" column="edit_time" jdbcType="TIMESTAMP"/>
             <result property="updateTime" column="update_time" jdbcType="TIMESTAMP"/>
             <result property="isDelete" column="is_delete" jdbcType="TINYINT"/>
+            <result property="auditStatus" column="audit_status" jdbcType="TINYINT"/>
+            <result property="auditMsg" column="audit_msg" jdbcType="VARCHAR"/>
+            <result property="auditorId" column="auditor_id" jdbcType="BIGINT"/>
+            <result property="auditTime" column="audit_time" jdbcType="TIMESTAMP"/>
     </resultMap>
 
     <sql id="Base_Column_List">
@@ -29,6 +33,7 @@
         p_size,p_width,p_height,
         p_scale,p_format,user_id,
         create_time,edit_time,update_time,
-        is_delete
+        is_delete,audit_status,audit_msg,
+        auditor_id,audit_time
     </sql>
 </mapper>
