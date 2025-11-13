@@ -10,26 +10,27 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectResult;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.config.CosClientConfig;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.domain.User;
+import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
+import com.zhao.zhaopicturebacked.mapper.PictureMapper;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
+import com.zhao.zhaopicturebacked.request.picture.PictureAudioRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
+import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
 import com.zhao.zhaopicturebacked.service.PictureService;
-import com.zhao.zhaopicturebacked.mapper.PictureMapper;
 import com.zhao.zhaopicturebacked.service.UserService;
 
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.UserUtil;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.internal.http2.ErrorCode;
-import org.bouncycastle.pqc.math.linearalgebra.IntUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,7 +39,6 @@ import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -63,18 +63,28 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private UserService userService;
 
+    /**
+     * 上传图片
+     * @param multipartFile
+     * @param pictureId
+     * @return
+     */
     @Override
-    public PictureVO uploadPicture(MultipartFile multipartFile,Long pictureId,Long userId) {
-        if (ObjUtil.isEmpty(userId)){
+    public PictureVO uploadPicture(MultipartFile multipartFile,Long pictureId,LoginUserVO loginUserVO) {
+        if (ObjUtil.isEmpty(loginUserVO.getId())){
             log.warn("userId参数为空");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id参数为空");
         }
-        //如果PictureId不为空，则证明是更新图片，需要检查图片在数据库是否存在
+        //如果PictureId不为空，则证明是更新图片，需要检查图片在数据库是否存在,并且只允许图片的创建者更新
         if(ObjUtil.isNotEmpty(pictureId)){
             Picture oldPicture = this.getById(pictureId);
             if (ObjUtil.isEmpty(oldPicture)){
                 log.warn("图片不存在");
                 ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片不存在");
+            }
+            if (!oldPicture.getUserId().equals(loginUserVO.getId())){
+                log.warn("不是图片的创建者");
+                ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
             }
             //如果图片存在于数据库，就说明图片也存在在对象存储上，需要进行删除
             String key = getKey(oldPicture.getUserId(),oldPicture.getpName(),oldPicture.getpFormat());
@@ -84,7 +94,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         //校验图片文件
         vailPictureFile(multipartFile);
         //上传图片并返回图片信息
-        PictureInfoResult pictureInfoResult = UploadPictureByStream(multipartFile,userId);
+        PictureInfoResult pictureInfoResult = UploadPictureByStream(multipartFile,loginUserVO.getId());
         //将图片存入数据库
         Picture picture = new Picture();
         picture.setpUrl(pictureInfoResult.getUrl());
@@ -96,7 +106,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setpHeight(pictureInfoResult.getHeight());
         picture.setpScale(pictureInfoResult.getScale());
         picture.setpFormat(pictureInfoResult.getFormat());
-        picture.setUserId(userId);
+        picture.setUserId(loginUserVO.getId());
+        fillAcditColumn(picture,loginUserVO);
         if(pictureId!=null){
             picture.setId(pictureId);
         }
@@ -113,7 +124,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureVO;
     }
 
+    public void fillAcditColumn(Picture picture,LoginUserVO loginUserVO){
+        if (loginUserVO.getUserType()== UserConstant.ADMIN){
+            picture.setAuditorId(loginUserVO.getId());
+            picture.setAuditTime(new Date());
+            picture.setAuditMsg("审核通过");
+            picture.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+        }else{
+            picture.setAuditStatus(AuditStatusEnum.REVIEWING.getCode());
+        }
 
+
+    }
 
     /**
      * 使用文件上传图片并返回原图信息的具体逻辑
@@ -195,19 +217,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureInfoResult;
     }
 
-    private PictureInfoResult getPictureInfoResult(String originalFilename, String key, String format, int height, int width, double scale, long size) {
-        PictureInfoResult pictureInfoResult;
-        pictureInfoResult = new PictureInfoResult();
-        pictureInfoResult.setFormat(format);
-        pictureInfoResult.setWidth(width);
-        pictureInfoResult.setHeight(height);
-        pictureInfoResult.setScale(scale);
-        pictureInfoResult.setSize(size);
-        pictureInfoResult.setUrl(cosClientConfig.getHost() + "/" + key);
-        pictureInfoResult.setName(FileUtil.getPrefix(originalFilename));
-        return pictureInfoResult;
-    }
 
+    /**
+     * 删除图片
+     * @param id
+     * @param loginUserVO
+     * @return
+     */
     @Override
     public Long deletePicture(Long id,LoginUserVO loginUserVO) {
         //1.校验id
@@ -249,8 +265,29 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return id;
     }
 
+    /**
+     * 查询图片
+     * @param pictureQueryRequest
+     * @return
+     */
     @Override
-    public Page<Picture> selectPage(Long id,Long userId, String searchText, String pCategory, List<String> pTags, Long pSize,Integer pWidth,Integer pHeight,Double pScale,String sortField, String sortOrder, Integer pageNum, Integer pageSize) {
+    public Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest) {
+        Long id = pictureQueryRequest.getId();
+        Long userId = pictureQueryRequest.getUserId();
+        String searchText = pictureQueryRequest.getSearchText();
+        String pCategory = pictureQueryRequest.getPCategory();
+        List<String> pTags = pictureQueryRequest.getPTags();
+        Long pSize = pictureQueryRequest.getPSize();
+        Integer pWidth = pictureQueryRequest.getPWidth();
+        Integer pHeight = pictureQueryRequest.getPHeight();
+        Double pScale = pictureQueryRequest.getPScale();
+        Integer auditStatus = pictureQueryRequest.getAuditStatus();
+        Long auditId = pictureQueryRequest.getAuditId();
+        String sortField = pictureQueryRequest.getSortField();
+        String sortOrder = pictureQueryRequest.getSortOrder();
+        Integer pageNum = pictureQueryRequest.getPageNum();
+        Integer pageSize = pictureQueryRequest.getPageSize();
+
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
         if (id!=null){
             if(id>0){
@@ -272,12 +309,21 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pWidth)&&pWidth>0,"p_width", pWidth);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pHeight)&&pHeight>0,"p_height", pHeight);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pScale)&&pScale>0,"p_scale", pScale);
+
+        pictureQueryWrapper.eq("audit_status", auditStatus);
+        pictureQueryWrapper.eq( ObjUtil.isNotEmpty(auditId)&&auditId>0,"audit_id", auditId);
         String s = convertFieldToColumn(sortField);
         pictureQueryWrapper.orderBy(ObjUtil.isNotNull(s), sortOrder.equals("asc"), s);
         Page<Picture> picturePage = this.page(new Page<>(pageNum, pageSize), pictureQueryWrapper);
         return picturePage;
     }
 
+    /**
+     * 编辑图片
+     * @param pictureEditRequest
+     * @param loginUserVO
+     * @return
+     */
     @Override
     public PictureVO editPicture(PictureEditRequest pictureEditRequest, LoginUserVO loginUserVO) {
         Long id = pictureEditRequest.getId();
@@ -309,6 +355,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setpCategory(pCategory);
         String tagsJson = JSONUtil.toJsonStr(pTags);
         picture.setpTags(tagsJson);
+        fillAcditColumn(picture,loginUserVO);
         boolean b = this.updateById(picture);
         if (!b){
             log.warn("更新图片失败");
@@ -319,6 +366,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureVO;
     }
 
+    /**
+     * 获取单个图片信息
+     * @param id
+     * @return
+     */
     @Override
     public PictureVO getPictureVOById(Long id) {
         if(id<0||ObjUtil.isEmpty(id)){
@@ -333,6 +385,42 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         PictureVO pictureVO = getPictureVOByPicture(picture);
         return pictureVO;
     }
+
+    /**
+     * 管理员审核信息
+     * @param pictureAudioRequest
+     */
+    @Override
+    public void auditPicture(PictureAudioRequest pictureAudioRequest, LoginUserVO loginUserVO) {
+        Long pictureId = pictureAudioRequest.getPictureId();
+        Integer audioStatus = pictureAudioRequest.getAudioStatus();
+        String audioMsg = pictureAudioRequest.getAudioMsg();
+        if(ObjUtil.isEmpty(pictureId)||ObjUtil.isEmpty(audioStatus)){
+            log.warn("参数错误");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数错误");
+        }
+
+        Picture oldPicture = this.getById(pictureId);
+        if(oldPicture.getAuditStatus().equals(AuditStatusEnum.getByCode(audioStatus))){
+            log.warn("图片已审核");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"请勿重复审核");
+        }
+
+        Picture picture = new Picture();
+        picture.setAuditMsg(audioMsg);
+        picture.setAuditStatus(audioStatus);
+        picture.setId(pictureId);
+        picture.setAuditTime(new Date());
+        picture.setAuditorId(loginUserVO.getId());
+        boolean b = this.updateById(picture);
+        if (!b){
+            log.warn("更新图片失败");
+            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"审核失败");
+        }
+        return ;
+
+    }
+
 
     public String getKey(Long userId,String name,String format){
         return String.format("/public/%s.%s.%s",userId,name,format);
@@ -380,7 +468,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
 
-
     public void vailPictureFile(MultipartFile multipartFile){
         //1.校验图片文件
         //1.0图片不能为空
@@ -409,6 +496,29 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
     }
 
+    /**
+     * 封装原图信息
+     * @param originalFilename
+     * @param key
+     * @param format
+     * @param height
+     * @param width
+     * @param scale
+     * @param size
+     * @return
+     */
+    private PictureInfoResult getPictureInfoResult(String originalFilename, String key, String format, int height, int width, double scale, long size) {
+        PictureInfoResult pictureInfoResult;
+        pictureInfoResult = new PictureInfoResult();
+        pictureInfoResult.setFormat(format);
+        pictureInfoResult.setWidth(width);
+        pictureInfoResult.setHeight(height);
+        pictureInfoResult.setScale(scale);
+        pictureInfoResult.setSize(size);
+        pictureInfoResult.setUrl(cosClientConfig.getHost() + "/" + key);
+        pictureInfoResult.setName(FileUtil.getPrefix(originalFilename));
+        return pictureInfoResult;
+    }
 
 
 

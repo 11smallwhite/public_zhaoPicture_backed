@@ -25,6 +25,8 @@ public class PictureQueryRequest extends PageRequest implements Serializable {
     private Integer pHeight;
     @JsonProperty("pScale")
     private Double pScale;
+    private Integer auditStatus;
+    private Long auditId;
     private String sortField;
     private String sortOrder;
 

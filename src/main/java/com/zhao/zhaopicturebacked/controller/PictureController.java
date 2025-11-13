@@ -5,15 +5,17 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhao.zhaopicturebacked.annotation.AuthType;
 import com.zhao.zhaopicturebacked.common.BaseResponse;
-import com.zhao.zhaopicturebacked.config.CosClientConfig;
+import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.domain.User;
+import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureTagCategory;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
+import com.zhao.zhaopicturebacked.request.picture.PictureAudioRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
@@ -29,7 +31,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import javax.swing.text.Utilities;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,8 @@ public class PictureController {
     @Autowired
     private PictureServiceImpl pictureServiceImpl;
 
+
+
     /**
      * 上传图片
      * @param multipartFile
@@ -58,7 +61,7 @@ public class PictureController {
      * @return
      */
     @PostMapping("/upload")
-    @AuthType(userType = 1)
+    @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
         Long pictureId = pictureUploadRequest.getId();
         String token = TokenUtil.getTokenFromCookie(request);
@@ -71,7 +74,7 @@ public class PictureController {
         LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
         log.info("Json数据{}转换为对象{}",loginUserVOJson,loginUserVO);
         Long userId = loginUserVO.getId();
-        PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureId, userId);
+        PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureId, loginUserVO);
         User user = null;
         try {
             user = userService.getById(userId);
@@ -110,23 +113,18 @@ public class PictureController {
      * @return
      */
     @PostMapping("/page/select/query")
-    public BaseResponse<Page<PictureVO>> select(@RequestBody PictureQueryRequest pictureQueryRequest){
-        Long id = pictureQueryRequest.getId();
-        Long userId = pictureQueryRequest.getUserId();
-        String searchText = pictureQueryRequest.getSearchText();
-        String pCategory = pictureQueryRequest.getPCategory();
-        List<String> pTags = pictureQueryRequest.getPTags();
-        Long pSize = pictureQueryRequest.getPSize();
-        Integer pWidth = pictureQueryRequest.getPWidth();
-        Integer pHeight = pictureQueryRequest.getPHeight();
-        Double pScale = pictureQueryRequest.getPScale();
-        String sortField = pictureQueryRequest.getSortField();
-        String sortOrder = pictureQueryRequest.getSortOrder();
-        Integer pageNum = pictureQueryRequest.getPageNum();
-        Integer pageSize = pictureQueryRequest.getPageSize();
+    public BaseResponse<Page<PictureVO>> select(@RequestBody PictureQueryRequest pictureQueryRequest,HttpServletRequest request){
 
-        Page<Picture> picturePage = pictureService.selectPage(id,userId, searchText, pCategory, pTags, pSize,pWidth,pHeight,pScale,sortField, sortOrder, pageNum, pageSize);
+        String servletPath = request.getServletPath();
+        if(!servletPath.contains("admin")){
+            pictureQueryRequest.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+        }
+        Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
+        //如果没查到数据，就直接返回空列表
         List<Picture> pictureList = picturePage.getRecords();
+        if(pictureList.size()==0 ){
+            return ResultUtil.success(new Page<>());
+        }
         List<PictureVO> pictureVOList = pictureList.stream().map(picture ->pictureServiceImpl.getPictureVOByPicture(picture)).collect(Collectors.toList());
         //优化点，PictureVO里的UserVO字段需要回库查询数据，很多图片的userId可能都是一样的，一样的userId我们没必要查询多遍
         //先将UserId进行去重
@@ -149,23 +147,11 @@ public class PictureController {
      * @return
      */
     @PostMapping("/page/select/admin")
-    @AuthType(userType = 1)
+    @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<Page<Picture>> selectAdmin(@RequestBody PictureQueryRequest pictureQueryRequest){
-        Long id = pictureQueryRequest.getId();
-        Long userId = pictureQueryRequest.getUserId();
-        String searchText = pictureQueryRequest.getSearchText();
-        String pCategory = pictureQueryRequest.getPCategory();
-        List<String> pTags = pictureQueryRequest.getPTags();
-        Long pSize = pictureQueryRequest.getPSize();
-        Integer pWidth = pictureQueryRequest.getPWidth();
-        Integer pHeight = pictureQueryRequest.getPHeight();
-        Double pScale = pictureQueryRequest.getPScale();
-        String sortField = pictureQueryRequest.getSortField();
-        String sortOrder = pictureQueryRequest.getSortOrder();
-        Integer pageNum = pictureQueryRequest.getPageNum();
-        Integer pageSize = pictureQueryRequest.getPageSize();
 
-        Page<Picture> picturePage = pictureService.selectPage(id,userId, searchText, pCategory, pTags, pSize,pWidth,pHeight,pScale,sortField, sortOrder, pageNum, pageSize);
+
+        Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
 
         return ResultUtil.success(picturePage,"查询成功");
     }
@@ -178,7 +164,7 @@ public class PictureController {
      * @return
      */
     @PostMapping("/edit")
-    @AuthType(userType = 0)
+    @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> editPicture(@RequestBody PictureEditRequest pictureEditRequest,HttpServletRequest request){
         String token = TokenUtil.getTokenFromCookie(request);
         String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
@@ -193,12 +179,29 @@ public class PictureController {
      * @return
      */
     @GetMapping("/get/vo")
-    @AuthType(userType = 0)
+    @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> getPictureVOById(Long id){
         PictureVO pictureVO = pictureService.getPictureVOById(id);
 
         return ResultUtil.success(pictureVO);
     }
+
+    /**
+     * 审核图片
+     * @param pictureAudioRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/audit/admin")
+    @AuthType(userType = UserConstant.ADMIN)
+    public BaseResponse<Boolean> auditPicture(@RequestBody PictureAudioRequest pictureAudioRequest,HttpServletRequest request){
+        String token = TokenUtil.getTokenFromCookie(request);
+        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
+        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
+        pictureService.auditPicture(pictureAudioRequest,loginUserVO);
+        return ResultUtil.success(true);
+    }
+
 
     /**
      * 预制标签和分类
