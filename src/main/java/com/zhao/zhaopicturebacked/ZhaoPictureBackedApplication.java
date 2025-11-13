@@ -10,9 +10,6 @@ public class ZhaoPictureBackedApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ZhaoPictureBackedApplication.class, args);
-
-
-
     }
 
 }

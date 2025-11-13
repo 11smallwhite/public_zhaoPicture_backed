@@ -4,8 +4,8 @@ package com.zhao.zhaopicturebacked.request.picture;
 import lombok.Data;
 
 @Data
-public class PictureAudioRequest {
+public class PictureAuditRequest {
     private Long pictureId;
-    private Integer audioStatus;
-    private String audioMsg;
+    private Integer auditStatus;
+    private String auditMsg;
 }
