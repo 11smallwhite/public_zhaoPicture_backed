@@ -186,6 +186,12 @@ public class PictureController {
         return ResultUtil.success(pictureVO);
     }
 
+    /**
+     * 审核图片
+     * @param pictureAudioRequest
+     * @param request
+     * @return
+     */
     @PostMapping("/audit/admin")
     @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<Boolean> auditPicture(@RequestBody PictureAudioRequest pictureAudioRequest,HttpServletRequest request){
