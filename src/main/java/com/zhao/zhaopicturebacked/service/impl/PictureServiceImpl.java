@@ -22,7 +22,7 @@ import com.zhao.zhaopicturebacked.mapper.PictureMapper;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
-import com.zhao.zhaopicturebacked.request.picture.PictureAudioRequest;
+import com.zhao.zhaopicturebacked.request.picture.PictureAuditRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
 import com.zhao.zhaopicturebacked.service.PictureService;
@@ -310,7 +310,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pHeight)&&pHeight>0,"p_height", pHeight);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pScale)&&pScale>0,"p_scale", pScale);
 
-        pictureQueryWrapper.eq("audit_status", auditStatus);
+        pictureQueryWrapper.eq(ObjUtil.isNotEmpty(auditStatus),"audit_status", auditStatus);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(auditId)&&auditId>0,"audit_id", auditId);
         String s = convertFieldToColumn(sortField);
         pictureQueryWrapper.orderBy(ObjUtil.isNotNull(s), sortOrder.equals("asc"), s);
@@ -343,7 +343,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         Long userId = oldPicture.getUserId();
         //校验是否有权限编辑图片
-        if(userId!=loginUserVO.getId()&&loginUserVO.getUserType()!=1){
+        if(!userId.equals(loginUserVO.getId()) && loginUserVO.getUserType()!=1){
             log.warn("用户没有权限编辑图片");
             ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
         }
@@ -388,13 +388,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     /**
      * 管理员审核信息
-     * @param pictureAudioRequest
+     * @param pictureAuditRequest
      */
     @Override
-    public void auditPicture(PictureAudioRequest pictureAudioRequest, LoginUserVO loginUserVO) {
-        Long pictureId = pictureAudioRequest.getPictureId();
-        Integer audioStatus = pictureAudioRequest.getAudioStatus();
-        String audioMsg = pictureAudioRequest.getAudioMsg();
+    public void auditPicture(PictureAuditRequest pictureAuditRequest, LoginUserVO loginUserVO) {
+        Long pictureId = pictureAuditRequest.getPictureId();
+        Integer audioStatus = pictureAuditRequest.getAuditStatus();
+        String audioMsg = pictureAuditRequest.getAuditMsg();
         if(ObjUtil.isEmpty(pictureId)||ObjUtil.isEmpty(audioStatus)){
             log.warn("参数错误");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数错误");

@@ -7,7 +7,7 @@ public enum AuditStatusEnum {
 
     REVIEWING(0, "审核中"),
     REVIEW_PASS(1, "审核通过"),
-    REVIEW_FAIL(-1, "审核失败");
+    REVIEW_FAIL(2, "审核失败");
 
 
     private final int code;

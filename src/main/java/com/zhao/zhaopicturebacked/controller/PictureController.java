@@ -15,7 +15,7 @@ import com.zhao.zhaopicturebacked.model.PictureTagCategory;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureAudioRequest;
+import com.zhao.zhaopicturebacked.request.picture.PictureAuditRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
 import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
@@ -61,7 +61,7 @@ public class PictureController {
      * @return
      */
     @PostMapping("/upload")
-    @AuthType(userType = UserConstant.ADMIN)
+    @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
         Long pictureId = pictureUploadRequest.getId();
         String token = TokenUtil.getTokenFromCookie(request);
@@ -188,17 +188,17 @@ public class PictureController {
 
     /**
      * 审核图片
-     * @param pictureAudioRequest
+     * @param pictureAuditRequest
      * @param request
      * @return
      */
     @PostMapping("/audit/admin")
     @AuthType(userType = UserConstant.ADMIN)
-    public BaseResponse<Boolean> auditPicture(@RequestBody PictureAudioRequest pictureAudioRequest,HttpServletRequest request){
+    public BaseResponse<Boolean> auditPicture(@RequestBody PictureAuditRequest pictureAuditRequest, HttpServletRequest request){
         String token = TokenUtil.getTokenFromCookie(request);
         String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
         LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        pictureService.auditPicture(pictureAudioRequest,loginUserVO);
+        pictureService.auditPicture(pictureAuditRequest,loginUserVO);
         return ResultUtil.success(true);
     }
 
