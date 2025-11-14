@@ -74,6 +74,9 @@ public class PictureController {
         LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
         log.info("Json数据{}转换为对象{}",loginUserVOJson,loginUserVO);
         Long userId = loginUserVO.getId();
+
+
+
         PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureId, loginUserVO);
         User user = null;
         try {

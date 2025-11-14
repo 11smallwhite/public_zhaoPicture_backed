@@ -1,19 +1,12 @@
 package com.zhao.zhaopicturebacked.service.impl;
 
-import cn.hutool.core.io.FileUtil;
-import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.qcloud.cos.model.ObjectMetadata;
-import com.qcloud.cos.model.PutObjectResult;
-import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
 import com.zhao.zhaopicturebacked.common.UserConstant;
-import com.zhao.zhaopicturebacked.config.CosClientConfig;
 import com.zhao.zhaopicturebacked.cos.CosService;
-import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.domain.User;
 import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
@@ -28,6 +21,8 @@ import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
 import com.zhao.zhaopicturebacked.service.PictureService;
 import com.zhao.zhaopicturebacked.service.UserService;
 
+import com.zhao.zhaopicturebacked.upload.FilePictureUpload;
+import com.zhao.zhaopicturebacked.upload.PictureUploadTemplate;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.UserUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -36,41 +31,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
-* @author Vip
-* @description 针对表【picture(图片)】的数据库操作Service实现
-* @createDate 2025-11-05 09:50:11
-*/
+ * @author Vip
+ * @description 针对表【picture(图片)】的数据库操作Service实现
+ * @createDate 2025-11-05 09:50:11
+ */
 @Service
 @Slf4j
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
-    implements PictureService{
+        implements PictureService{
 
     @Resource
     private CosService cosService;
-
-    @Resource
-    private CosClientConfig cosClientConfig;
 
     @Resource
     private UserService userService;
 
     /**
      * 上传图片
-     * @param multipartFile
+     * @param
      * @param pictureId
      * @return
      */
     @Override
-    public PictureVO uploadPicture(MultipartFile multipartFile,Long pictureId,LoginUserVO loginUserVO) {
+    public PictureVO uploadPicture(Object inputSource,Long pictureId,LoginUserVO loginUserVO) {
         if (ObjUtil.isEmpty(loginUserVO.getId())){
             log.warn("userId参数为空");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id参数为空");
@@ -87,30 +73,21 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
             }
             //如果图片存在于数据库，就说明图片也存在在对象存储上，需要进行删除
-            String key = getKey(oldPicture.getUserId(),oldPicture.getpName(),oldPicture.getpFormat());
+            String key = String.format("/public/%s.%s.%s",oldPicture.getUserId(),oldPicture.getpName(),oldPicture.getpFormat());
 
             cosService.deletePicture(key);
         }
-        //校验图片文件
-        vailPictureFile(multipartFile);
-        //上传图片并返回图片信息
-        PictureInfoResult pictureInfoResult = UploadPictureByStream(multipartFile,loginUserVO.getId());
-        //将图片存入数据库
-        Picture picture = new Picture();
-        picture.setpUrl(pictureInfoResult.getUrl());
-        picture.setpName(pictureInfoResult.getName());
-        picture.setpIntroduction("该图片很懒，什么都没留下");
-        picture.setpCategory("未分类");
-        picture.setpSize(pictureInfoResult.getSize());
-        picture.setpWidth(pictureInfoResult.getWidth());
-        picture.setpHeight(pictureInfoResult.getHeight());
-        picture.setpScale(pictureInfoResult.getScale());
-        picture.setpFormat(pictureInfoResult.getFormat());
-        picture.setUserId(loginUserVO.getId());
-        fillAcditColumn(picture,loginUserVO);
-        if(pictureId!=null){
-            picture.setId(pictureId);
+        PictureUploadTemplate pictureUploadTemplate = null;
+        if (inputSource instanceof MultipartFile){
+            pictureUploadTemplate = new FilePictureUpload();
+        }else if (inputSource instanceof String){
+            pictureUploadTemplate = new FilePictureUpload();
         }
+        if(pictureUploadTemplate==null){
+            log.warn("不支持未知的方式上传图片");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"不支持未知的方式上传图片");
+        }
+        Picture picture = pictureUploadTemplate.uploadPicture(inputSource, pictureId, loginUserVO);
         //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
         boolean save = this.saveOrUpdate( picture);
         if (!save) {
@@ -123,100 +100,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         return pictureVO;
     }
-
-    public void fillAcditColumn(Picture picture,LoginUserVO loginUserVO){
-        if (loginUserVO.getUserType()== UserConstant.ADMIN){
-            picture.setAuditorId(loginUserVO.getId());
-            picture.setAuditTime(new Date());
-            picture.setAuditMsg("审核通过");
-            picture.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
-        }else{
-            picture.setAuditStatus(AuditStatusEnum.REVIEWING.getCode());
-        }
-
-
-    }
-
-    /**
-     * 使用文件上传图片并返回原图信息的具体逻辑
-     * @param multipartFile
-     * @return
-     */
-    public PictureInfoResult UploadPictureByFile(MultipartFile multipartFile) {
-        log.info("执行方法UploadPicture,参数为{}和{}", multipartFile);
-        String originalFilename = multipartFile.getOriginalFilename();
-        //2.构建图片存储目录路径key,并将multipartFile转换成File
-        //2.1 构造一个  /picture/id/时间/uuid.文件名的key
-        String key = String.format("/%s/%s/%s.%s", "public", System.currentTimeMillis(), UUID.randomUUID(), originalFilename);
-        //2.2将multipartFile转换成File
-        PictureInfoResult pictureInfoResult = null;
-        File file = null;
-        try {
-            file = FileUtil.createTempFile();
-            multipartFile.transferTo(file);
-            log.info("文件对象转换成功");
-            //3.上传图片到COS并返回原图信息
-            PutObjectResult putObjectResult = cosService.putPictureAndOperation(key, file);
-            //4.封装原图信息,存放数据库
-            ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
-            String format = imageInfo.getFormat();
-            int height = imageInfo.getHeight();
-            int width = imageInfo.getWidth();
-            double scale = NumberUtil.round(width * 1.0 / height, 2).doubleValue();
-            long size = FileUtil.size(file);
-            //5.将原图信息封装在PictureInfoResult中
-            pictureInfoResult = getPictureInfoResult(originalFilename, key, format, height, width, scale, size);
-        } catch (IOException e) {
-            log.warn("文件对象转换失败，错误信息{}", e);
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR, "文件对象转换失败");
-        } finally {
-            FileUtil.del(file);
-            log.info("删除临时文件");
-        }
-        return pictureInfoResult;
-    }
-
-
-
-
-    /**
-     * 使用流上传图片并返回原图信息
-     * @param multipartFile
-     * @return
-     */
-    public PictureInfoResult UploadPictureByStream(MultipartFile multipartFile,Long userId) {
-        log.info("执行方法UploadPictureByStream,参数为{}和{}", multipartFile);
-        String originalFilename = multipartFile.getOriginalFilename();
-        String name = FileUtil.mainName(originalFilename);
-        String suffix = FileUtil.getSuffix(originalFilename);
-        String key = getKey(userId,name,suffix);
-        PictureInfoResult pictureInfoResult = null;
-        try{
-            //获取到文件的流
-            InputStream inputStream = multipartFile.getInputStream();
-            ObjectMetadata objectMetadata = new ObjectMetadata();
-            //设置流的长度
-            objectMetadata.setContentLength(multipartFile.getSize());
-            objectMetadata.setContentType(multipartFile.getContentType());
-            PutObjectResult putObjectResult = cosService.putPictureByStreamAndOperation(key, inputStream, objectMetadata);
-            //4.封装原图信息,存放数据库
-            ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
-            //这里如果使用imageInfo的format，会出现的一种情况是，imageInfo的format保存的是jpeg，所以数据库存的也是jpeg，但是对象存储上的文件后缀是jpg，这会在删除时出现错误。所以这里需要使用FileUtil.getSuffix(originalFilename)获取文件后缀
-            //String format = imageInfo.getFormat();
-            String format = FileUtil.getSuffix(originalFilename);
-            int height = imageInfo.getHeight();
-            int width = imageInfo.getWidth();
-            double scale = NumberUtil.round(width * 1.0 / height, 2).doubleValue();
-            long size = multipartFile.getSize();
-            //5.将原图信息封装在PictureInfoResult中
-            pictureInfoResult = getPictureInfoResult(originalFilename, key, format, height, width, scale, size);
-        }catch (IOException e){
-            log.warn("获取文件的流对象失败，错误信息{}", e);
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR, "获取文件的流对象失败");
-        }
-        return pictureInfoResult;
-    }
-
 
     /**
      * 删除图片
@@ -254,7 +137,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         //todo
         //3.删除对象存储数据
         //得到要删除数据的key
-        String key = getKey(userId, picture.getpName(), picture.getpFormat());
+        String key = String.format("/public/%s.%s.%s",userId, picture.getpName(), picture.getpFormat());
         try {
             log.info("删除对象存储里的图片信息");
             cosService.deletePicture(key);
@@ -355,7 +238,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setpCategory(pCategory);
         String tagsJson = JSONUtil.toJsonStr(pTags);
         picture.setpTags(tagsJson);
-        fillAcditColumn(picture,loginUserVO);
+        if (loginUserVO.getUserType()== UserConstant.ADMIN){
+            picture.setAuditorId(loginUserVO.getId());
+            picture.setAuditTime(new Date());
+            picture.setAuditMsg("审核通过");
+            picture.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+        }else{
+            picture.setAuditStatus(AuditStatusEnum.REVIEWING.getCode());
+        }
         boolean b = this.updateById(picture);
         if (!b){
             log.warn("更新图片失败");
@@ -421,11 +311,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     }
 
-
-    public String getKey(Long userId,String name,String format){
-        return String.format("/public/%s.%s.%s",userId,name,format);
-    }
-
     // 字段名映射方法
     private String convertFieldToColumn(String fieldName) {
         if (ObjUtil.isEmpty(fieldName)) {
@@ -466,61 +351,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         pictureVO.setUserVO(userVO);
         return pictureVO;
     }
-
-
-    public void vailPictureFile(MultipartFile multipartFile){
-        //1.校验图片文件
-        //1.0图片不能为空
-        if (multipartFile.isEmpty()) {
-            log.info("图片文件为空");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"不允许上传空文件");
-        }
-        //1.1图片大小不能超过2M
-        long size = multipartFile.getSize();
-        if (size > 1024 * 1024 * 2) {
-            log.info("图片大小不能超过2M");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片大小不能超过2M");
-        }
-        //1.2允许的图片格式
-        String originalFilename = multipartFile.getOriginalFilename();
-        String suffix = FileUtil.getSuffix(originalFilename);
-        //白名单，允许的图片后缀
-        final ArrayList<String> pSuffix = new ArrayList<>();
-        pSuffix.add("png");
-        pSuffix.add("jpg");
-        pSuffix.add("jpeg");
-        pSuffix.add("avif");
-        if (!pSuffix.contains(suffix)) {
-            log.info("图片格式错误");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片格式错误");
-        }
-    }
-
-    /**
-     * 封装原图信息
-     * @param originalFilename
-     * @param key
-     * @param format
-     * @param height
-     * @param width
-     * @param scale
-     * @param size
-     * @return
-     */
-    private PictureInfoResult getPictureInfoResult(String originalFilename, String key, String format, int height, int width, double scale, long size) {
-        PictureInfoResult pictureInfoResult;
-        pictureInfoResult = new PictureInfoResult();
-        pictureInfoResult.setFormat(format);
-        pictureInfoResult.setWidth(width);
-        pictureInfoResult.setHeight(height);
-        pictureInfoResult.setScale(scale);
-        pictureInfoResult.setSize(size);
-        pictureInfoResult.setUrl(cosClientConfig.getHost() + "/" + key);
-        pictureInfoResult.setName(FileUtil.getPrefix(originalFilename));
-        return pictureInfoResult;
-    }
-
-
 
 }
 
