@@ -23,14 +23,17 @@ import com.zhao.zhaopicturebacked.service.UserService;
 
 import com.zhao.zhaopicturebacked.upload.FilePictureUpload;
 import com.zhao.zhaopicturebacked.upload.PictureUploadTemplate;
+import com.zhao.zhaopicturebacked.upload.UrlPictureUpload;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.UserUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
+import java.io.File;
 import java.util.*;
 
 /**
@@ -48,6 +51,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private UserService userService;
+
+
+    @Resource
+    private FilePictureUpload pictureUploadTemplate;
+    @Resource
+    private UrlPictureUpload urlPictureUpload;
+    @Autowired
+    private FilePictureUpload filePictureUpload;
 
     /**
      * 上传图片
@@ -79,21 +90,29 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         PictureUploadTemplate pictureUploadTemplate = null;
         if (inputSource instanceof MultipartFile){
-            pictureUploadTemplate = new FilePictureUpload();
+            pictureUploadTemplate = filePictureUpload;
         }else if (inputSource instanceof String){
-            pictureUploadTemplate = new FilePictureUpload();
+            pictureUploadTemplate = urlPictureUpload;
         }
         if(pictureUploadTemplate==null){
             log.warn("不支持未知的方式上传图片");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"不支持未知的方式上传图片");
         }
-        Picture picture = pictureUploadTemplate.uploadPicture(inputSource, pictureId, loginUserVO);
-        //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
-        boolean save = this.saveOrUpdate( picture);
-        if (!save) {
-            log.error("图片保存失败");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片保存失败");
+        Picture picture = null;
+        try{
+            picture = pictureUploadTemplate.uploadPicture(inputSource, pictureId, loginUserVO);
+            //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
+            boolean save = this.saveOrUpdate( picture);
+            if (!save) {
+                log.error("图片保存失败");
+                ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片保存失败");
+            }
+        }catch (Exception e){
+            log.error("系统错误，上传图片失败");
         }
+
+
+
         log.info("picture:{}",picture);
         //5.返回PictureVO
         PictureVO pictureVO = getPictureVOByPicture(picture);
