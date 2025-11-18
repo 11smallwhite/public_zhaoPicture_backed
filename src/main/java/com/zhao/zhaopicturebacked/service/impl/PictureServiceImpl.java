@@ -15,9 +15,7 @@ import com.zhao.zhaopicturebacked.mapper.PictureMapper;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
-import com.zhao.zhaopicturebacked.request.picture.PictureAuditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
+import com.zhao.zhaopicturebacked.request.picture.*;
 import com.zhao.zhaopicturebacked.service.PictureService;
 import com.zhao.zhaopicturebacked.service.UserService;
 
@@ -27,6 +25,10 @@ import com.zhao.zhaopicturebacked.upload.UrlPictureUpload;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.UserUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -62,11 +65,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     /**
      * 上传图片
      * @param
-     * @param pictureId
+     * @param pictureUploadRequest
      * @return
      */
     @Override
-    public PictureVO uploadPicture(Object inputSource,Long pictureId,LoginUserVO loginUserVO) {
+    public PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, LoginUserVO loginUserVO) {
+        Long pictureId = pictureUploadRequest.getId();
         if (ObjUtil.isEmpty(loginUserVO.getId())){
             log.warn("userId参数为空");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id参数为空");
@@ -100,9 +104,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = null;
         try{
             log.info("开始执行上传图片方法");
-            picture = pictureUploadTemplate.uploadPicture(inputSource, pictureId, loginUserVO);
+            picture = pictureUploadTemplate.uploadPicture(inputSource, pictureUploadRequest, loginUserVO);
             //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
-            boolean save = this.saveOrUpdate( picture);
+            boolean save = this.saveOrUpdate(picture);
             if (!save) {
                 log.error("图片保存失败");
                 ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片保存失败");
@@ -113,11 +117,73 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
 
 
-        log.info("picture:{}",picture);
+        log.info("上传图片成功：picture:{}",picture);
         //5.返回PictureVO
         PictureVO pictureVO = getPictureVOByPicture(picture);
 
         return pictureVO;
+    }
+
+    @Override
+    public int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, LoginUserVO loginUserVO) {
+        //校验爬取参数，不能一次爬超过30条
+        String searchText = pictureUploadByBatchRequest.getSearchText();
+        Integer count = pictureUploadByBatchRequest.getCount();
+        if(count>30){
+            log.warn("一次爬取不能超过30条");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"一次爬取不能超过30条");
+        }
+        //构造爬取的url
+        String url = String.format("https://cn.bing.com/images/async?q=%s&mmasync=1",searchText);
+        //找到爬取图片的img标签
+        Document document = null;
+        try {
+            document = Jsoup.connect(url).get();
+
+        } catch (IOException e) {
+            log.error("爬取图片失败.失败地址:{}", url);
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"爬取图片失败");
+        }
+        //收集爬取的url
+        Element elementByClass = document.getElementsByClass("dgControl").first();
+        if (elementByClass==null){
+            log.warn("未找到图片标签");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"未找到图片标签");
+        }
+        Elements elements = elementByClass.select("img.mimg");
+        int countMax = 0;
+        for (Element element : elements){
+            String fileUrl = element.attr("src");
+            if (fileUrl==null){
+                log.warn("图片url为空");
+                continue;
+            }
+            //处理url，防止参数转义导致问题
+            int i = fileUrl.indexOf("?");
+            if(i>=0){
+                fileUrl = fileUrl.substring(0,i);
+            }
+            try {
+                PictureUploadRequest pictureUploadRequest = new PictureUploadRequest();
+
+                //根据URL路径上传图片
+                String namePrefix = pictureUploadByBatchRequest.getNamePrefix();
+                pictureUploadRequest.setPicName(namePrefix+(countMax+1));
+                PictureVO pictureVO = this.uploadPicture(fileUrl, pictureUploadRequest, loginUserVO);
+                log.info("爬取图片成功上传:{}", pictureVO);
+                countMax++;
+
+            }catch (Exception e){
+                log.error("图片爬取失败:{}",fileUrl);
+                continue;
+            }
+            if(countMax>=count){
+                break;
+            }
+
+        }
+
+        return countMax;
     }
 
     /**

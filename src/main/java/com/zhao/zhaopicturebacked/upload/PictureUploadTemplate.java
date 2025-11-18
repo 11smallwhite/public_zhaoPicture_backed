@@ -14,6 +14,7 @@ import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
+import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,9 @@ public abstract class PictureUploadTemplate {
 
 
 
-    public Picture uploadPicture(Object inputSource, Long pictureId, LoginUserVO loginUserVO){
+    public Picture uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, LoginUserVO loginUserVO){
+
+        Long pictureId = pictureUploadRequest.getId();
 
         Long userId = loginUserVO.getId();
 
@@ -49,7 +52,12 @@ public abstract class PictureUploadTemplate {
         //将图片存入数据库
         Picture picture = new Picture();
         picture.setpUrl(pictureInfoResult.getUrl());
-        picture.setpName(pictureInfoResult.getName());
+        String picName = pictureUploadRequest.getPicName();
+        if(ObjUtil.isNotEmpty(picName)){
+            picture.setpName(picName);
+        }else{
+            picture.setpName(pictureInfoResult.getName());
+        }
         picture.setpIntroduction("该图片很懒，什么都没留下");
         picture.setpCategory("未分类");
         picture.setpSize(pictureInfoResult.getSize());

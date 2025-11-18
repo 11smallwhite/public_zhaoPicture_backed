@@ -5,9 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureVO;
-import com.zhao.zhaopicturebacked.request.picture.PictureAuditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
+import com.zhao.zhaopicturebacked.request.picture.*;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -16,7 +14,8 @@ import org.springframework.web.multipart.MultipartFile;
 * @createDate 2025-11-05 09:50:11
 */
 public interface PictureService extends IService<Picture> {
-    PictureVO uploadPicture(Object inputSource,Long pictureId,LoginUserVO loginUserVO);
+    PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, LoginUserVO loginUserVO);
+    int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, LoginUserVO loginUserVO);
     Long deletePicture(Long id, LoginUserVO loginUserVO);
     Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest);
     PictureVO editPicture(PictureEditRequest pictureEditRequest,LoginUserVO loginUserVO);

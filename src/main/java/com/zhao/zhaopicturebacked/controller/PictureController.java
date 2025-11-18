@@ -15,10 +15,7 @@ import com.zhao.zhaopicturebacked.model.PictureTagCategory;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureAuditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureEditRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureQueryRequest;
-import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
+import com.zhao.zhaopicturebacked.request.picture.*;
 import com.zhao.zhaopicturebacked.service.PictureService;
 import com.zhao.zhaopicturebacked.service.UserService;
 import com.zhao.zhaopicturebacked.service.impl.PictureServiceImpl;
@@ -31,10 +28,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @RestController
@@ -63,7 +62,6 @@ public class PictureController {
     @PostMapping("/upload")
     @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
-        Long pictureId = pictureUploadRequest.getId();
         String token = TokenUtil.getTokenFromCookie(request);
         String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
         log.info("从redis里获取登录用户信息{}",loginUserVOJson);
@@ -77,7 +75,7 @@ public class PictureController {
 
 
 
-        PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureId, loginUserVO);
+        PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureUploadRequest, loginUserVO);
         User user = null;
         try {
             user = userService.getById(userId);
@@ -100,7 +98,6 @@ public class PictureController {
     @PostMapping("/upload/url")
     @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> uploadPictureByUrl(PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
-        Long pictureId = pictureUploadRequest.getId();
         String token = TokenUtil.getTokenFromCookie(request);
         String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
         log.info("从redis里获取登录用户信息{}",loginUserVOJson);
@@ -114,7 +111,7 @@ public class PictureController {
 
         String fileUrl = pictureUploadRequest.getFileUrl();
 
-        PictureVO pictureVO = pictureService.uploadPicture(fileUrl,pictureId, loginUserVO);
+        PictureVO pictureVO = pictureService.uploadPicture(fileUrl,pictureUploadRequest, loginUserVO);
         User user = null;
         try {
             user = userService.getById(userId);
@@ -127,6 +124,28 @@ public class PictureController {
         pictureVO.setUserVO(userVO);
         return ResultUtil.success(pictureVO);
     }
+
+    @PostMapping("/upload/batch")
+    @AuthType(userType = UserConstant.ADMIN)
+    public BaseResponse<Integer> uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, HttpServletRequest request, HttpServletResponse response) {
+        if (pictureUploadByBatchRequest == null){
+            log.info("参数pictureUploadByBatchRequest为空");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数pictureUploadByBatchRequest为空");
+        }
+        String token = TokenUtil.getTokenFromCookie(request);
+        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
+        if (loginUserVOJson == null){
+            log.info("从redis里没有找到用户信息,token已过期或未登录");
+            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"未登录");
+        }
+        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
+        stringRedisTemplate.expire(token,60*60, TimeUnit.SECONDS);
+        //续期cookie
+        TokenUtil.setTokenToCookie(token, response);
+        int count = pictureService.uploadPictureByBatch(pictureUploadByBatchRequest, loginUserVO);
+        return ResultUtil.success(count,"上传成功");
+    }
+
 
 
     /**
