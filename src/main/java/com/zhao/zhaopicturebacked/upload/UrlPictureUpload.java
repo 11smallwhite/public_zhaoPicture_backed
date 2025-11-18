@@ -134,8 +134,8 @@ public class UrlPictureUpload extends PictureUploadTemplate{
             double scale = NumberUtil.round(width * 1.0 / height, 2).doubleValue();
             long size = FileUtil.size(tempFile);
             //4.将原图信息封装在PictureInfoResult中
-            String originalFilename = tempFile.getName();
-            String name = originalFilename.substring(6);
+            String name = tempFile.getName();
+
             pictureInfoResult = getPictureInfoResult(name, key, format, height, width, scale, size);
         }catch (Exception e){
             log.warn("文件对象转换失败，错误信息{}", e);

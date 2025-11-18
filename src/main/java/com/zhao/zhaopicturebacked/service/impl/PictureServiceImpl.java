@@ -53,8 +53,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private UserService userService;
 
 
-    @Resource
-    private FilePictureUpload pictureUploadTemplate;
+
     @Resource
     private UrlPictureUpload urlPictureUpload;
     @Autowired
@@ -100,6 +99,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         Picture picture = null;
         try{
+            log.info("开始执行上传图片方法");
             picture = pictureUploadTemplate.uploadPicture(inputSource, pictureId, loginUserVO);
             //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
             boolean save = this.saveOrUpdate( picture);

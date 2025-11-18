@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.util.Date;
 
 @Slf4j
+@Component
 public abstract class PictureUploadTemplate {
 
 
