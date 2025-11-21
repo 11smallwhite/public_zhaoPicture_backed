@@ -1,6 +1,7 @@
 package com.zhao.zhaopicturebacked.domain;
 
 import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -10,6 +11,7 @@ import java.util.Date;
  * @TableName picture
  */
 @TableName(value ="picture")
+@Data
 public class Picture implements Serializable {
     /**
      * id
@@ -22,6 +24,12 @@ public class Picture implements Serializable {
      */
     @TableField(value = "p_url")
     private String pUrl;
+    /**
+     * 图片 url
+     */
+    @TableField(value = "thumbnail_url")
+    private String thumbnailUrl;
+
 
     /**
      * 图片名称

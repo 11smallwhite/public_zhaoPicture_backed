@@ -11,4 +11,5 @@ public class PictureInfoResult {
     private Long size;
     private String url;
     private String name;
+    private String thumbnailUrl;
 }

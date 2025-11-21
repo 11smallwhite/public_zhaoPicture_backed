@@ -1,5 +1,6 @@
 package com.zhao.zhaopicturebacked.upload;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.core.util.ObjUtil;
@@ -9,7 +10,9 @@ import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
 import cn.hutool.http.Method;
 import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.qcloud.cos.model.ciModel.persistence.ProcessResults;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
@@ -127,14 +130,27 @@ public class UrlPictureUpload extends PictureUploadTemplate{
             HttpUtil.downloadFile(fileUrl, tempFile);
             //3.将文件上传到COS
             PutObjectResult putObjectResult = cosService.putPictureAndOperation(key, tempFile);
+            String name = tempFile.getName();
             ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
+            ProcessResults processResults = putObjectResult.getCiUploadResult().getProcessResults();
+            List<CIObject> objectList = processResults.getObjectList();
+            if(CollUtil.isNotEmpty(objectList)){
+
+                CIObject compressPicCiObject = objectList.get(0);
+                log.info("获取压缩图{}", compressPicCiObject);
+                CIObject thumbnailPicCiObject = objectList.get(1);
+                log.info("获取缩略图{}",thumbnailPicCiObject);
+                pictureInfoResult = getPictureInfoResult(name, compressPicCiObject,thumbnailPicCiObject);
+                return pictureInfoResult;
+
+            }
             String format = imageInfo.getFormat();
             int height = imageInfo.getHeight();
             int width = imageInfo.getWidth();
             double scale = NumberUtil.round(width * 1.0 / height, 2).doubleValue();
             long size = FileUtil.size(tempFile);
             //4.将原图信息封装在PictureInfoResult中
-            String name = tempFile.getName();
+
 
             pictureInfoResult = getPictureInfoResult(name, key, format, height, width, scale, size);
         }catch (Exception e){

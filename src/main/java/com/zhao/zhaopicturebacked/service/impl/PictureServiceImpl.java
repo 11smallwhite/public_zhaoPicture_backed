@@ -113,6 +113,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             }
         }catch (Exception e){
             log.error("系统错误，上传图片失败");
+            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"系统错误，上传图片失败");
         }
 
 

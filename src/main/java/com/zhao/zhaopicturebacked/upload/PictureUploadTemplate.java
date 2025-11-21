@@ -6,6 +6,7 @@ import cn.hutool.core.util.ObjUtil;
 import cn.hutool.http.HttpUtil;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
 import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.cos.CosService;
@@ -65,6 +66,7 @@ public abstract class PictureUploadTemplate {
         picture.setpHeight(pictureInfoResult.getHeight());
         picture.setpScale(pictureInfoResult.getScale());
         picture.setpFormat(pictureInfoResult.getFormat());
+        picture.setThumbnailUrl(pictureInfoResult.getThumbnailUrl());
         picture.setUserId(loginUserVO.getId());
         if (loginUserVO.getUserType()== UserConstant.ADMIN){
             picture.setAuditorId(loginUserVO.getId());
@@ -148,6 +150,27 @@ public abstract class PictureUploadTemplate {
         pictureInfoResult.setSize(size);
         pictureInfoResult.setUrl(cosService.getHost() + "/" + key);
         pictureInfoResult.setName(FileUtil.getPrefix(originalFilename));
+        return pictureInfoResult;
+    }
+
+
+    public PictureInfoResult getPictureInfoResult(String originalFilename, CIObject compressedCiObject, CIObject thumbnaliPicCiObject) {
+        String thumbnailKey = thumbnaliPicCiObject.getKey();
+        Integer width = compressedCiObject.getWidth();
+        Integer height = compressedCiObject.getHeight();
+        long size = compressedCiObject.getSize().longValue();
+        Double scale = NumberUtil.round(width * 1.0 / height, 2).doubleValue();
+        String format = compressedCiObject.getFormat();
+        String key = compressedCiObject.getKey();
+        PictureInfoResult pictureInfoResult = new PictureInfoResult();
+        pictureInfoResult.setFormat(format);
+        pictureInfoResult.setWidth(width);
+        pictureInfoResult.setHeight(height);
+        pictureInfoResult.setScale(scale);
+        pictureInfoResult.setSize(size);
+        pictureInfoResult.setUrl(cosService.getHost() + "/" + key);
+        pictureInfoResult.setName(FileUtil.getPrefix(originalFilename));
+        pictureInfoResult.setThumbnailUrl(cosService.getHost() + "/" + thumbnailKey);
         return pictureInfoResult;
     }
 

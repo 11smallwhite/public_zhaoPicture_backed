@@ -17,6 +17,8 @@ public class PictureVO implements Serializable {
     @JsonProperty("pUrl")
     private String pUrl;
 
+    private String thumbnailUrl;
+
     @JsonProperty("pName")
     private String pName;
 
