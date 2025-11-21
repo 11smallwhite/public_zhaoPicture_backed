@@ -103,7 +103,7 @@ public class UserController {
             ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"loginUser为空");
         }
         //续期redis
-        stringRedisTemplate.expire(token,30, TimeUnit.SECONDS);
+        stringRedisTemplate.expire(token,60*60, TimeUnit.SECONDS);
         //续期cookie
         TokenUtil.setTokenToCookie(token, response);
         LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);

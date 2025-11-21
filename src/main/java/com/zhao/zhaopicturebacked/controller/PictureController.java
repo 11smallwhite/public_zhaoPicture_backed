@@ -1,9 +1,17 @@
 package com.zhao.zhaopicturebacked.controller;
 
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.crypto.digest.MD5;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.zhao.zhaopicturebacked.annotation.AuthType;
+import com.zhao.zhaopicturebacked.cache.PicturePageCacheTemplate;
+import com.zhao.zhaopicturebacked.cache.PicturePageCaffeineCache;
+import com.zhao.zhaopicturebacked.cache.PicturePageRedisCache;
 import com.zhao.zhaopicturebacked.common.BaseResponse;
 import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.domain.Picture;
@@ -23,12 +31,15 @@ import com.zhao.zhaopicturebacked.utils.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -48,8 +59,20 @@ public class PictureController {
 
     @Resource
     private UserService userService;
+    @Resource
+    private PicturePageCaffeineCache picturePageCaffeineCache;
+    @Resource
+    private PicturePageRedisCache picturePageRedisCache;
+
+
     @Autowired
     private PictureServiceImpl pictureServiceImpl;
+
+    private final Cache<String, String> LOCAL_CACHE = Caffeine.newBuilder()
+            .initialCapacity(1024)
+            .maximumSize(10000)
+            .expireAfterWrite(Duration.ofMinutes(5))
+            .build();
 
 
 
@@ -179,11 +202,34 @@ public class PictureController {
         if(!servletPath.contains("admin")){
             pictureQueryRequest.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
         }
+
+
+          //先构造缓存key
+        String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
+        String ma5HexJsonStr = DigestUtils.md5DigestAsHex(jsonStr.getBytes());
+        String redisKey = "picture:pagePictureVOCache"+ma5HexJsonStr;
+        //查找Caffeine缓存
+        String caffeineCache = LOCAL_CACHE.getIfPresent(redisKey);
+        if (caffeineCache != null){
+            log.info("从Caffeine缓存里获取数据成功");
+            Page<PictureVO> pictureVOPage = JSONUtil.toBean(caffeineCache, Page.class);
+            return ResultUtil.success(pictureVOPage);
+        }
+        //redis查找缓存
+        ValueOperations<String, String> stringStringValueOperations = stringRedisTemplate.opsForValue();
+        String cache = stringStringValueOperations.get(redisKey);
+        if(cache != null){
+            log.info("从redis里获取数据成功");
+            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cache, Page.class);
+            return ResultUtil.success(pictureVOPage);
+        }
         Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
-        //如果没查到数据，就直接返回空列表
+        //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
         List<Picture> pictureList = picturePage.getRecords();
         if(pictureList.size()==0 ){
-            return ResultUtil.success(new Page<>());
+            LOCAL_CACHE.put(redisKey,JSONUtil.toJsonStr(new Page<PictureVO>()));
+            stringStringValueOperations.set(redisKey,JSONUtil.toJsonStr(new Page<PictureVO>()),60*60,TimeUnit.SECONDS);
+            return ResultUtil.success(new Page<PictureVO>());
         }
         List<PictureVO> pictureVOList = pictureList.stream().map(picture ->pictureServiceImpl.getPictureVOByPicture(picture)).collect(Collectors.toList());
         //优化点，PictureVO里的UserVO字段需要回库查询数据，很多图片的userId可能都是一样的，一样的userId我们没必要查询多遍
@@ -197,6 +243,12 @@ public class PictureController {
         });
         Page<PictureVO> pictureVOPage = new Page<>(picturePage.getCurrent(), picturePage.getSize(), picturePage.getTotal());
         pictureVOPage.setRecords(pictureVOList);
+        //给Caffeine缓存数据
+        log.info("将数据写入Caffeine缓存");
+        LOCAL_CACHE.put(redisKey,JSONUtil.toJsonStr(pictureVOPage));
+        //给redis设置缓存,并设置缓存过期时间
+        log.info("将数据缓存进redis");
+        stringStringValueOperations.set(redisKey, JSONUtil.toJsonStr(pictureVOPage), 60*60, TimeUnit.SECONDS);
         return ResultUtil.success(pictureVOPage,"查询成功");
     }
 
