@@ -32,9 +32,12 @@ class ZhaoPictureBackedApplicationTests {
 
     @Test
     public void downloadPicture(){
-        File tempFile = FileUtil.createTempFile();
-        String key =  String.format("/public/1986704662206394370.logo.avif");
-        cosService.deletePicture( key);
+        int a = 1;
+        aaa(a);
+        System.out.println(a);
+    }
+    public void aaa(int a){
+        a++;
     }
 
 
