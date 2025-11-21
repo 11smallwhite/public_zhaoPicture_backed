@@ -1,10 +1,14 @@
 package com.zhao.zhaopicturebacked.upload;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.NumberUtil;
+import cn.hutool.core.util.ObjUtil;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectResult;
+import com.qcloud.cos.model.ciModel.persistence.CIObject;
 import com.qcloud.cos.model.ciModel.persistence.ImageInfo;
+import com.qcloud.cos.model.ciModel.persistence.ProcessResults;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
@@ -18,6 +22,7 @@ import javax.annotation.Resource;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -96,12 +101,31 @@ public class FilePictureUpload extends PictureUploadTemplate{
             //设置流的长度
             objectMetadata.setContentLength(multipartFile.getSize());
             objectMetadata.setContentType(multipartFile.getContentType());
-            PutObjectResult putObjectResult = cosService.putPictureByStreamAndOperation(key, inputStream, objectMetadata);
+            PutObjectResult putObjectResult = cosService.putPictureByStreamAndOperation(key, inputStream, objectMetadata,multipartFile);
+
             //4.封装原图信息,存放数据库
+            String originalFilename = multipartFile.getOriginalFilename();
             ImageInfo imageInfo = putObjectResult.getCiUploadResult().getOriginalInfo().getImageInfo();
+            ProcessResults processResults = putObjectResult.getCiUploadResult().getProcessResults();
+            List<CIObject> objectList = processResults.getObjectList();
+            if(CollUtil.isNotEmpty(objectList)){
+
+                CIObject compressPicCiObject = objectList.get(0);
+                log.info("获取压缩图{}", compressPicCiObject);
+                CIObject thumbnailPicCiObject = compressPicCiObject;
+                if(objectList.size()>1){
+                    thumbnailPicCiObject = objectList.get(1);
+                    log.info("获取缩略图{}",thumbnailPicCiObject);
+                }else{
+                    log.info("没有缩略图，缩略图就是压缩图");
+                }
+
+                pictureInfoResult = getPictureInfoResult(originalFilename, compressPicCiObject,thumbnailPicCiObject);
+                return pictureInfoResult;
+
+            }
             //这里如果使用imageInfo的format，会出现的一种情况是，imageInfo的format保存的是jpeg，所以数据库存的也是jpeg，但是对象存储上的文件后缀是jpg，这会在删除时出现错误。所以这里需要使用FileUtil.getSuffix(originalFilename)获取文件后缀
             //String format = imageInfo.getFormat();
-            String originalFilename = multipartFile.getOriginalFilename();
             String format = FileUtil.getSuffix(originalFilename);
             int height = imageInfo.getHeight();
             int width = imageInfo.getWidth();
