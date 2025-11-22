@@ -37,3 +37,8 @@ knife4j:
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+#定时任务启动
+task:
+  insertTask:
+    isStart: 1 #是否开启定时任务
