@@ -87,8 +87,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
             }
             //如果图片存在于数据库，就说明图片也存在在对象存储上，需要进行删除
-            String key = String.format("/public/%s.%s.%s",oldPicture.getUserId(),oldPicture.getpName(),oldPicture.getpFormat());
-
+            String url = oldPicture.getpUrl();
+            int index = url.indexOf("com/");
+            String key = url.substring(index + 4);
             cosService.deletePicture(key);
         }
         PictureUploadTemplate pictureUploadTemplate = null;
@@ -223,7 +224,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         //todo
         //3.删除对象存储数据
         //得到要删除数据的key
-        String key = String.format("/public/%s.%s.%s",userId, picture.getpName(), picture.getpFormat());
+        String url = picture.getpUrl();
+        int index = url.indexOf("com/");
+        String key = url.substring(index + 4);
         try {
             log.info("删除对象存储里的图片信息");
             cosService.deletePicture(key);

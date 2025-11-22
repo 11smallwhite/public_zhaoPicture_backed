@@ -1,6 +1,7 @@
 package com.zhao.zhaopicturebacked.controller;
 
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.crypto.digest.MD5;
 import cn.hutool.json.JSONUtil;
@@ -209,19 +210,29 @@ public class PictureController {
         String ma5HexJsonStr = DigestUtils.md5DigestAsHex(jsonStr.getBytes());
         String redisKey = "picture:pagePictureVOCache"+ma5HexJsonStr;
         //查找Caffeine缓存
-        String caffeineCache = LOCAL_CACHE.getIfPresent(redisKey);
-        if (caffeineCache != null){
+        String cache = LOCAL_CACHE.getIfPresent(redisKey);
+        if (cache != null){
             log.info("从Caffeine缓存里获取数据成功");
-            Page<PictureVO> pictureVOPage = JSONUtil.toBean(caffeineCache, Page.class);
+            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cache, Page.class);
             return ResultUtil.success(pictureVOPage);
         }
         //redis查找缓存
         ValueOperations<String, String> stringStringValueOperations = stringRedisTemplate.opsForValue();
-        String cache = stringStringValueOperations.get(redisKey);
+        cache = stringStringValueOperations.get(redisKey);
         if(cache != null){
             log.info("从redis里获取数据成功");
             Page<PictureVO> pictureVOPage = JSONUtil.toBean(cache, Page.class);
             return ResultUtil.success(pictureVOPage);
+        }
+
+
+        //todo 使用分布式锁，只允许一个线程去查询数据库，其他线程等待，这样数据库压力变小，但是用户体验变差，预防了缓存击穿问题
+        if (StrUtil.isBlank( cache)){
+            //分布式锁{
+            //  if(StrUtil.isBlank(cache)){
+            //
+            //  }
+            // }
         }
         Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
         //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
@@ -244,11 +255,12 @@ public class PictureController {
         Page<PictureVO> pictureVOPage = new Page<>(picturePage.getCurrent(), picturePage.getSize(), picturePage.getTotal());
         pictureVOPage.setRecords(pictureVOList);
         //给Caffeine缓存数据
+        cache = JSONUtil.toJsonStr(pictureVOPage);
         log.info("将数据写入Caffeine缓存");
-        LOCAL_CACHE.put(redisKey,JSONUtil.toJsonStr(pictureVOPage));
+        LOCAL_CACHE.put(redisKey,cache);
         //给redis设置缓存,并设置缓存过期时间
         log.info("将数据缓存进redis");
-        stringStringValueOperations.set(redisKey, JSONUtil.toJsonStr(pictureVOPage), 60*60, TimeUnit.SECONDS);
+        stringStringValueOperations.set(redisKey, cache, 60*60, TimeUnit.SECONDS);
         return ResultUtil.success(pictureVOPage,"查询成功");
     }
 
