@@ -10,6 +10,8 @@ import com.qcloud.cos.COSClient;
 import com.zhao.zhaopicturebacked.cos.CosClientConfig;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import org.junit.jupiter.api.Test;
+import org.redisson.api.RList;
+import org.redisson.api.RedissonClient;
 import org.springframework.boot.test.context.SpringBootTest;
 
 
@@ -29,15 +31,19 @@ class ZhaoPictureBackedApplicationTests {
     private CosService cosService;
 
 
+    @Resource
+    private RedissonClient redissonClient;
 
     @Test
     public void downloadPicture(){
-        int a = 1;
-        aaa(a);
-        System.out.println(a);
+        RList<Object> redisson = redissonClient.getList("redisson");
+        redisson.add("xixihaha");
+        redisson.add(4);
+        redisson.add("hellow");
+        System.out.println(redisson.get(0));
     }
     public void aaa(int a){
-        a++;
+
     }
 
 

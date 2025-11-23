@@ -1,5 +1,6 @@
 package com.zhao.zhaopicturebacked.controller;
 
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
@@ -10,9 +11,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.zhao.zhaopicturebacked.annotation.AuthType;
-import com.zhao.zhaopicturebacked.cache.PicturePageCacheTemplate;
-import com.zhao.zhaopicturebacked.cache.PicturePageCaffeineCache;
-import com.zhao.zhaopicturebacked.cache.PicturePageRedisCache;
+import com.zhao.zhaopicturebacked.cache.*;
 import com.zhao.zhaopicturebacked.common.BaseResponse;
 import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.domain.Picture;
@@ -40,11 +39,12 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -61,19 +61,14 @@ public class PictureController {
     @Resource
     private UserService userService;
     @Resource
-    private PicturePageCaffeineCache picturePageCaffeineCache;
+    private RedisCacheStrategy redisCacheStrategy;
     @Resource
-    private PicturePageRedisCache picturePageRedisCache;
+    private CaffeienCacheStrategy caffeienCacheStrategy;
 
 
     @Autowired
     private PictureServiceImpl pictureServiceImpl;
 
-    private final Cache<String, String> LOCAL_CACHE = Caffeine.newBuilder()
-            .initialCapacity(1024)
-            .maximumSize(10000)
-            .expireAfterWrite(Duration.ofMinutes(5))
-            .build();
 
 
 
@@ -203,65 +198,133 @@ public class PictureController {
         if(!servletPath.contains("admin")){
             pictureQueryRequest.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
         }
-
-
-          //先构造缓存key
-        String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
-        String ma5HexJsonStr = DigestUtils.md5DigestAsHex(jsonStr.getBytes());
-        String redisKey = "picture:pagePictureVOCache"+ma5HexJsonStr;
+        //根据PictureQueryRequest使用MD5加密构造缓存key
+        String key = getCacheKey(pictureQueryRequest);
+        Page<PictureVO> pictureVOPage = null;
         //查找Caffeine缓存
-        String cache = LOCAL_CACHE.getIfPresent(redisKey);
+        String cache = caffeienCacheStrategy.getCache(key);
         if (cache != null){
             log.info("从Caffeine缓存里获取数据成功");
-            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cache, Page.class);
+            pictureVOPage = JSONUtil.toBean(cache,new TypeReference<Page<PictureVO>>() {}, true);
             return ResultUtil.success(pictureVOPage);
         }
         //redis查找缓存
-        ValueOperations<String, String> stringStringValueOperations = stringRedisTemplate.opsForValue();
-        cache = stringStringValueOperations.get(redisKey);
+        cache = redisCacheStrategy.getCache(key);
         if(cache != null){
             log.info("从redis里获取数据成功");
-            Page<PictureVO> pictureVOPage = JSONUtil.toBean(cache, Page.class);
+            pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+            //将缓存写入Caffeine缓存
+            caffeienCacheStrategy.setCache(key,cache);
             return ResultUtil.success(pictureVOPage);
         }
+        //锁可以再细一点，查询不同的分页用的锁也不同
+        String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
+        String lockKeyMd5 = DigestUtils.md5DigestAsHex(jsonStr.getBytes(StandardCharsets.UTF_8));
+        String lock = String.format("zhaopicture:controller:select_picture:%s:lock",lockKeyMd5);
+        String lockValue =  UUID.randomUUID().toString();
+        long timeout = 30;
+        //重试五次
+        int maxRetry = 5;
+        //重试间隔时间1秒
+        long retryInterval = 1000;
+        //重试计数
+        int retryCount = 0;
 
+        // 创建一个单线程的定时任务执行器，用于续期
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        Boolean success = false;
+        ScheduledFuture<?> renewalTask = null;
+        try{
+            //使用重试机制抢锁
 
-        //todo 使用分布式锁，只允许一个线程去查询数据库，其他线程等待，这样数据库压力变小，但是用户体验变差，预防了缓存击穿问题
-        if (StrUtil.isBlank( cache)){
-            //分布式锁{
-            //  if(StrUtil.isBlank(cache)){
-            //
-            //  }
-            // }
-        }
-        Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
-        //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
-        List<Picture> pictureList = picturePage.getRecords();
-        if(pictureList.size()==0 ){
-            LOCAL_CACHE.put(redisKey,JSONUtil.toJsonStr(new Page<PictureVO>()));
-            stringStringValueOperations.set(redisKey,JSONUtil.toJsonStr(new Page<PictureVO>()),60*60,TimeUnit.SECONDS);
-            return ResultUtil.success(new Page<PictureVO>());
-        }
-        List<PictureVO> pictureVOList = pictureList.stream().map(picture ->pictureServiceImpl.getPictureVOByPicture(picture)).collect(Collectors.toList());
-        //优化点，PictureVO里的UserVO字段需要回库查询数据，很多图片的userId可能都是一样的，一样的userId我们没必要查询多遍
-        //先将UserId进行去重
-        Set<Long> userIdSet = pictureList.stream().map(Picture::getUserId).collect(Collectors.toSet());
-        Map<Long, User> userMap = userService.listByIds(userIdSet).stream().collect(Collectors.toMap(User::getId, user -> user));
-        pictureVOList.forEach(pictureVO -> {
-            if (userMap.containsKey(pictureVO.getUserId())){
-                pictureVO.setUserVO(UserUtil.getUserVOByUser(userMap.get(pictureVO.getUserId())));
+            while(retryCount < maxRetry && !success){
+                success = stringRedisTemplate.opsForValue().setIfAbsent(lock,lockValue, timeout, TimeUnit.SECONDS);
+                if(Boolean.FALSE.equals(success)){
+                    //如果锁被其他线程占用，则等待重试
+                    Thread.sleep(retryInterval);
+                    retryCount++;
+                }
             }
-        });
-        Page<PictureVO> pictureVOPage = new Page<>(picturePage.getCurrent(), picturePage.getSize(), picturePage.getTotal());
-        pictureVOPage.setRecords(pictureVOList);
-        //给Caffeine缓存数据
-        cache = JSONUtil.toJsonStr(pictureVOPage);
-        log.info("将数据写入Caffeine缓存");
-        LOCAL_CACHE.put(redisKey,cache);
-        //给redis设置缓存,并设置缓存过期时间
-        log.info("将数据缓存进redis");
-        stringStringValueOperations.set(redisKey, cache, 60*60, TimeUnit.SECONDS);
+            //抢到锁后，先开启续期机制
+            renewalTask = scheduler.scheduleAtFixedRate(() -> {
+                // 定时执行续期任务
+                //保险机制，先进行判断锁是不是自己的
+                if(lockValue.equals(stringRedisTemplate.opsForValue().get(lock))){
+                    stringRedisTemplate.expire(lock, 30, TimeUnit.SECONDS);
+                    log.info("锁续期成功");
+                }
+            }, 10, 10, TimeUnit.SECONDS);//从现在开始，再过10秒执行第一次任务，之后每隔10秒执行一次任务
+
+            //抢到了锁之后，再次查询缓存
+            cache = caffeienCacheStrategy.getCache(key);
+            if (cache != null){
+                log.info("从Caffeine缓存里获取数据成功");
+                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+                return ResultUtil.success(pictureVOPage);
+            }
+            cache = redisCacheStrategy.getCache(key);
+            if(cache != null){
+                log.info("从redis里获取数据成功");
+                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+                //将缓存写入Caffeine缓存
+                caffeienCacheStrategy.setCache(key,cache);
+                return ResultUtil.success(pictureVOPage);
+            }
+            //如果还是没有缓存，就需要查数据库了
+            Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
+            //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
+            List<Picture> pictureList = picturePage.getRecords();
+            if(pictureList.size()==0 ){
+                caffeienCacheStrategy.setCache(key,JSONUtil.toJsonStr(new Page<PictureVO>()));
+                redisCacheStrategy.setCache(key,JSONUtil.toJsonStr(new Page<PictureVO>()),60*15,TimeUnit.SECONDS);
+                return ResultUtil.success(new Page<PictureVO>());
+            }
+            List<PictureVO> pictureVOList = pictureList.stream().map(picture ->pictureServiceImpl.getPictureVOByPicture(picture)).collect(Collectors.toList());
+            //优化点，PictureVO里的UserVO字段需要回库查询数据，很多图片的userId可能都是一样的，一样的userId我们没必要查询多遍
+            //先将UserId进行去重
+            Set<Long> userIdSet = pictureList.stream().map(Picture::getUserId).collect(Collectors.toSet());
+            Map<Long, User> userMap = userService.listByIds(userIdSet).stream().collect(Collectors.toMap(User::getId, user -> user));
+            pictureVOList.forEach(pictureVO -> {
+                if (userMap.containsKey(pictureVO.getUserId())){
+                    pictureVO.setUserVO(UserUtil.getUserVOByUser(userMap.get(pictureVO.getUserId())));
+                }
+            });
+            pictureVOPage = new Page<>(picturePage.getCurrent(), picturePage.getSize(), picturePage.getTotal());
+            pictureVOPage.setRecords(pictureVOList);
+            //给Caffeine缓存数据
+            cache = JSONUtil.toJsonStr(pictureVOPage);
+            log.info("将数据写入Caffeine缓存");
+            caffeienCacheStrategy.setCache(key, cache);
+            //给redis设置缓存,并设置缓存过期时间
+            log.info("将数据缓存进redis");
+            redisCacheStrategy.setCache(key, cache, 60*60, TimeUnit.SECONDS);
+
+        }catch (Exception e){
+            log.error("分页查询图片数据失败",e);
+            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"系统错误");
+        }finally {
+            //要确保是自己的锁才释放，获取锁失败的人不能释放
+            if(success){
+                stringRedisTemplate.delete(lock);
+            }
+            if(renewalTask!=null){
+                renewalTask.cancel(true);
+            }
+            // 关闭定时任务执行器
+            if (scheduler != null && !scheduler.isShutdown()) {
+                scheduler.shutdown();
+            }
+        }
         return ResultUtil.success(pictureVOPage,"查询成功");
+    }
+
+    //构造缓存Key
+    private static String getCacheKey(PictureQueryRequest pictureQueryRequest) {
+        //先构造缓存key
+        String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
+        String ma5HexJsonStr = DigestUtils.md5DigestAsHex(jsonStr.getBytes());
+        String Key = "picture:pagePictureVOCache"+ma5HexJsonStr;
+        return Key;
     }
 
 

@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
 @Slf4j
 @Component
 public class CaffeienCacheStrategy implements CacheStrategy{
@@ -22,9 +24,15 @@ public class CaffeienCacheStrategy implements CacheStrategy{
         return caffeineCache;
     }
 
+
     @Override
     public void setCache(String key, String value) {
         log.info("将数据写入Caffeine缓存");
-        LOCAL_CACHE.put(key, JSONUtil.toJsonStr(value));
+        LOCAL_CACHE.put(key, value);
+    }
+
+    @Override
+    public void deleteCache(String key) {
+        LOCAL_CACHE.invalidate(key);
     }
 }

@@ -25,6 +25,11 @@ public class Picture implements Serializable {
     @TableField(value = "p_url")
     private String pUrl;
     /**
+     * 空间 id
+     */
+    @TableField(value = "space_id")
+    private Long spaceId;
+    /**
      * 图片 url
      */
     @TableField(value = "thumbnail_url")
@@ -100,7 +105,7 @@ public class Picture implements Serializable {
     /**
      * 编辑时间
      */
-    @TableField(value = "edit_time",fill = FieldFill.INSERT_UPDATE)
+    @TableField(value = "edit_time")
     private Date editTime;
 
     /**

@@ -35,7 +35,7 @@ public class cleanPictureJob implements Job {
     public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
         log.info("现在的时间是：{}",new Date());
         log.info("执行删除图片的定时任务");
-        //使用redis实现分布式锁
+        //使用redis实现分布式锁 todo 这个锁还有问题，如果执行时间超过了锁的过期时间，就会出现问题
         // 分布式锁参数
         final String lockKey = "zhaopicture:task:clean_picture:lock";
         final String lockValue = UUID.randomUUID().toString(); // 唯一值，防止误删
@@ -80,7 +80,11 @@ public class cleanPictureJob implements Job {
 
             List<CompletableFuture<Void>> collect = list.stream().map(picture -> CompletableFuture.runAsync(() -> {
                 try {
-
+                    Long count = pictureService.lambdaQuery().eq(Picture::getpUrl, picture.getpUrl()).count();
+                    if (count > 1){
+                        log.info("图片{}被其他用户使用，不能删除",picture.getpUrl());
+                        return;
+                    }
                     //将这些图片从COS对象存储中删除，并且删库
                     log.info("开始删除图片");
 

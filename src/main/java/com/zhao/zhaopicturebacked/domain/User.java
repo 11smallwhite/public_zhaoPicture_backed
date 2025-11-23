@@ -63,7 +63,7 @@ public class User implements Serializable {
     /**
      * 编辑时间
      */
-    @TableField(value = "edit_time",fill = FieldFill.INSERT_UPDATE)
+    @TableField(value = "edit_time")
     private Date editTime;
 
     /**
