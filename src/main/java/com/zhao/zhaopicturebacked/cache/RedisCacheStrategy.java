@@ -26,10 +26,21 @@ public class RedisCacheStrategy implements CacheStrategy{
         return cache;
     }
 
+
+    public void setCache(String key, String value, long timeOut, TimeUnit timeUnit) {
+        //给redis设置缓存,并设置缓存过期时间
+        log.info("将数据缓存进redis");
+        stringRedisTemplate.opsForValue().set(key, value, timeOut,timeUnit);
+    }
     @Override
     public void setCache(String key, String value) {
         //给redis设置缓存,并设置缓存过期时间
         log.info("将数据缓存进redis");
         stringRedisTemplate.opsForValue().set(key, value, 60*60, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void deleteCache(String key) {
+        stringRedisTemplate.delete(key);
     }
 }

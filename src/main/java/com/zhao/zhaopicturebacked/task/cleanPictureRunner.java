@@ -15,7 +15,7 @@ public class cleanPictureRunner extends Thread{
             //2.创建Trigger（触发器）
             Trigger trigger = TriggerBuilder.newTrigger()
                     .withIdentity("everyWeek", "picture") // 触发器名称和分组自定义
-                    .withSchedule(CronScheduleBuilder.cronSchedule("0/5 * * * * ?  ")) // 定时：此处cron表达式每周一天0点执行一次
+                    .withSchedule(CronScheduleBuilder.cronSchedule("0 0 0 1/7 * ?   ")) // 定时：此处cron表达式每周一天0点执行一次
                     .build();
             TriggerKey key = trigger.getKey();
 
