@@ -12,10 +12,13 @@ import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.domain.Picture;
+import com.zhao.zhaopicturebacked.domain.Space;
 import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
+import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
+import com.zhao.zhaopicturebacked.service.SpaceService;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -36,9 +39,12 @@ public abstract class PictureUploadTemplate {
    @Resource
    private CosService cosService;
 
+   @Resource
+   private SpaceService spaceService;
 
 
-    public Picture uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, LoginUserVO loginUserVO){
+
+    public Picture uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, UserVO loginUserVO){
 
         Long pictureId = pictureUploadRequest.getId();
 
@@ -48,7 +54,33 @@ public abstract class PictureUploadTemplate {
 
         String key = getKey(inputSource, userId);
 
+
+        Long spaceId = pictureUploadRequest.getSpaceId();
+        //如果spaceId不为空，则证明是上传图片到空间，需要检查空间在数据库是否存在,并且只允许空间创建者上传图片
+        Space space = null;
+        if(ObjUtil.isNotEmpty(pictureId)){
+            space = spaceService.getById(spaceId);
+            if(ObjUtil.isEmpty(space)){
+                log.warn("空间不存在");
+                ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"空间不存在");
+            }
+            if(!space.getUserId().equals(loginUserVO.getId())){
+                log.warn("不是空间创建者");
+                ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
+            }
+        }
+
+
         PictureInfoResult pictureInfoResult = UploadPicture(inputSource, key);
+
+
+        String format = pictureInfoResult.getFormat();
+        Integer width = pictureInfoResult.getWidth();
+        Integer height = pictureInfoResult.getHeight();
+        Double scale = pictureInfoResult.getScale();
+        Long size = pictureInfoResult.getSize();
+        String url = pictureInfoResult.getUrl();
+
 
         //将图片存入数据库
         Picture picture = new Picture();
@@ -61,18 +93,26 @@ public abstract class PictureUploadTemplate {
         }
         picture.setpIntroduction("该图片很懒，什么都没留下");
         picture.setpCategory("未分类");
-        picture.setpSize(pictureInfoResult.getSize());
-        picture.setpWidth(pictureInfoResult.getWidth());
-        picture.setpHeight(pictureInfoResult.getHeight());
-        picture.setpScale(pictureInfoResult.getScale());
-        picture.setpFormat(pictureInfoResult.getFormat());
-        picture.setThumbnailUrl(pictureInfoResult.getThumbnailUrl());
+        picture.setpSize(size);
+        picture.setpWidth(width);
+        picture.setpHeight(height);
+        picture.setpScale(scale);
+        picture.setpFormat(format);
+        picture.setThumbnailUrl(url);
         picture.setUserId(loginUserVO.getId());
+
         if (loginUserVO.getUserType()== UserConstant.ADMIN){
-            picture.setAuditorId(loginUserVO.getId());
-            picture.setAuditTime(new Date());
-            picture.setAuditMsg("审核通过");
-            picture.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+            fillAuditor(loginUserVO, picture);
+        }else if(ObjUtil.isNotEmpty(spaceId)){
+            //如果空间没超额
+            space = spaceService.spaceLevelelCheck(space, 1, size);
+            boolean b = spaceService.updateById(space);
+            if(!b){
+                log.warn("空间更新失败");
+                ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"空间更新失败");
+            }
+            fillAuditor(loginUserVO, picture);
+
         }else{
             picture.setAuditStatus(AuditStatusEnum.REVIEWING.getCode());
         }
@@ -83,6 +123,12 @@ public abstract class PictureUploadTemplate {
 
     }
 
+    private void fillAuditor(UserVO loginUserVO, Picture picture) {
+        picture.setAuditorId(loginUserVO.getId());
+        picture.setAuditTime(new Date());
+        picture.setAuditMsg("审核通过");
+        picture.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+    }
 
 
     public abstract void vailPicture(Object inputSource);
