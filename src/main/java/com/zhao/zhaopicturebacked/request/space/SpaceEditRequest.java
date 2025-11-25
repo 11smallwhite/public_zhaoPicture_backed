@@ -10,6 +10,4 @@ public class SpaceEditRequest implements Serializable {
     private Long id;
     private String spaceName;
     private int spaceLevel;
-    private Long maxSize;
-    private Long maxCount;
 }
