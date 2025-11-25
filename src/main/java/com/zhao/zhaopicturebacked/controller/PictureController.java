@@ -81,30 +81,17 @@ public class PictureController {
     @PostMapping("/upload")
     @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        log.info("从redis里获取登录用户信息{}",loginUserVOJson);
-        if (ObjUtil.isEmpty(loginUserVOJson)){
-            log.info("从redis里没有找到用户信息,token已过期或未登录");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"未登录");
-        }
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        log.info("Json数据{}转换为对象{}",loginUserVOJson,loginUserVO);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
+
         Long userId = loginUserVO.getId();
 
-
-
         PictureVO pictureVO = pictureService.uploadPicture(multipartFile,pictureUploadRequest, loginUserVO);
-        User user = null;
-        try {
-            user = userService.getById(userId);
-            log.info("pictureVO需要填充UserVO，要查数据库得到user");
-        }catch (Exception e){
-            log.error("查询数据库失败");
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"数据库查询出现了错误");
-        }
+
+
+        User user = userService.getById(userId);
         UserVO userVO = UserUtil.getUserVOByUser(user);
         pictureVO.setUserVO(userVO);
+
        return ResultUtil.success(pictureVO);
     }
 
@@ -117,28 +104,16 @@ public class PictureController {
     @PostMapping("/upload/url")
     @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> uploadPictureByUrl(PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        log.info("从redis里获取登录用户信息{}",loginUserVOJson);
-        if (ObjUtil.isEmpty(loginUserVOJson)){
-            log.info("从redis里没有找到用户信息,token已过期或未登录");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"未登录");
-        }
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        log.info("Json数据{}转换为对象{}",loginUserVOJson,loginUserVO);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
+
         Long userId = loginUserVO.getId();
 
         String fileUrl = pictureUploadRequest.getFileUrl();
 
         PictureVO pictureVO = pictureService.uploadPicture(fileUrl,pictureUploadRequest, loginUserVO);
-        User user = null;
-        try {
-            user = userService.getById(userId);
-            log.info("pictureVO需要填充UserVO，要查数据库得到user");
-        }catch (Exception e){
-            log.error("查询数据库失败");
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"数据库查询出现了错误");
-        }
+
+
+        User user = userService.getById(userId);
         UserVO userVO = UserUtil.getUserVOByUser(user);
         pictureVO.setUserVO(userVO);
         return ResultUtil.success(pictureVO);
@@ -147,20 +122,9 @@ public class PictureController {
     @PostMapping("/upload/batch")
     @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<Integer> uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, HttpServletRequest request, HttpServletResponse response) {
-        if (pictureUploadByBatchRequest == null){
-            log.info("参数pictureUploadByBatchRequest为空");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数pictureUploadByBatchRequest为空");
-        }
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        if (loginUserVOJson == null){
-            log.info("从redis里没有找到用户信息,token已过期或未登录");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"未登录");
-        }
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        stringRedisTemplate.expire(token,60*60, TimeUnit.SECONDS);
-        //续期cookie
-        TokenUtil.setTokenToCookie(token, response);
+
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
+
         int count = pictureService.uploadPictureByBatch(pictureUploadByBatchRequest, loginUserVO);
         return ResultUtil.success(count,"上传成功");
     }
@@ -176,12 +140,8 @@ public class PictureController {
     @PostMapping("/delete")
     @AuthType(userType = 0)
     public BaseResponse<Long> deletePictureById(@RequestBody DeleteRequest deleteRequest,HttpServletRequest request){
-        Long id = deleteRequest.getId();
-        String token = TokenUtil.getTokenFromCookie(request);
-        //从redis里拿到用户信息
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        Long delete = pictureService.deletePicture(id,loginUserVO);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
+        Long delete = pictureService.deletePicture(deleteRequest,loginUserVO);
         return ResultUtil.success(delete,"删除成功");
     }
 
@@ -192,6 +152,7 @@ public class PictureController {
      * @return
      */
     @PostMapping("/page/select/query")
+    //todo 暂时优化到这了
     public BaseResponse<Page<PictureVO>> select(@RequestBody PictureQueryRequest pictureQueryRequest,HttpServletRequest request){
 
         String servletPath = request.getServletPath();

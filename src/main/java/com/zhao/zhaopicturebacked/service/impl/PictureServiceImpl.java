@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.domain.Picture;
+import com.zhao.zhaopicturebacked.domain.Space;
 import com.zhao.zhaopicturebacked.domain.User;
 import com.zhao.zhaopicturebacked.enums.AuditStatusEnum;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
@@ -15,8 +16,10 @@ import com.zhao.zhaopicturebacked.mapper.PictureMapper;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
 import com.zhao.zhaopicturebacked.model.PictureVO;
 import com.zhao.zhaopicturebacked.model.UserVO;
+import com.zhao.zhaopicturebacked.request.DeleteRequest;
 import com.zhao.zhaopicturebacked.request.picture.*;
 import com.zhao.zhaopicturebacked.service.PictureService;
+import com.zhao.zhaopicturebacked.service.SpaceService;
 import com.zhao.zhaopicturebacked.service.UserService;
 
 import com.zhao.zhaopicturebacked.upload.FilePictureUpload;
@@ -55,6 +58,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private UserService userService;
 
+    @Resource
+    private SpaceService spaceService;
+
 
 
     @Resource
@@ -69,12 +75,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * @return
      */
     @Override
-    public PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, LoginUserVO loginUserVO) {
+    public PictureVO uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, UserVO loginUserVO) {
         Long pictureId = pictureUploadRequest.getId();
-        if (ObjUtil.isEmpty(loginUserVO.getId())){
-            log.warn("userId参数为空");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id参数为空");
-        }
+
         //如果PictureId不为空，则证明是更新图片，需要检查图片在数据库是否存在,并且只允许图片的创建者更新
         if(ObjUtil.isNotEmpty(pictureId)){
             Picture oldPicture = this.getById(pictureId);
@@ -92,6 +95,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             String key = url.substring(index + 4);
             cosService.deletePicture(key);
         }
+
         PictureUploadTemplate pictureUploadTemplate = null;
         if (inputSource instanceof MultipartFile){
             pictureUploadTemplate = filePictureUpload;
@@ -102,20 +106,16 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             log.warn("不支持未知的方式上传图片");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"不支持未知的方式上传图片");
         }
-        Picture picture = null;
-        try{
-            log.info("开始执行上传图片方法");
-            picture = pictureUploadTemplate.uploadPicture(inputSource, pictureUploadRequest, loginUserVO);
-            //todo 这里要使用自动填充,picture的createTime等字段在插入时自动填充会picture里
-            boolean save = this.saveOrUpdate(picture);
-            if (!save) {
-                log.error("图片保存失败");
-                ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片保存失败");
-            }
-        }catch (Exception e){
-            log.error("系统错误，上传图片失败");
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"系统错误，上传图片失败");
+
+
+        log.info("开始执行上传图片方法");
+        Picture picture = pictureUploadTemplate.uploadPicture(inputSource, pictureUploadRequest, loginUserVO);
+        boolean save = this.saveOrUpdate(picture);
+        if (!save) {
+            log.error("图片保存失败");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"图片保存失败");
         }
+
 
 
 
@@ -127,7 +127,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, LoginUserVO loginUserVO) {
+    public int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, UserVO loginUserVO) {
         //校验爬取参数，不能一次爬超过30条
         String searchText = pictureUploadByBatchRequest.getSearchText();
         Integer count = pictureUploadByBatchRequest.getCount();
@@ -154,6 +154,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         Elements elements = elementByClass.select("img.mimg");
         int countMax = 0;
+        //todo 这里能不能使用异步任务去优化呢？
         for (Element element : elements){
             String fileUrl = element.attr("src");
             if (fileUrl==null){
@@ -190,12 +191,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     /**
      * 删除图片
-     * @param id
+     * @param deleteRequest
      * @param loginUserVO
      * @return
      */
     @Override
-    public Long deletePicture(Long id,LoginUserVO loginUserVO) {
+    public Long deletePicture(DeleteRequest deleteRequest, UserVO loginUserVO) {
+        Long id = deleteRequest.getId();
         //1.校验id
         if (ObjUtil.isEmpty(id)){
             log.warn("id参数为空");

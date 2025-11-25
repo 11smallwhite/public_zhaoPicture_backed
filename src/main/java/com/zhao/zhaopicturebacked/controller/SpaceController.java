@@ -34,14 +34,11 @@ public class SpaceController {
     @AuthType(userType = UserConstant.USER)
     @PostMapping("/add")
     public BaseResponse<Boolean> addSpace(SpaceAddRequest spaceAddRequest, HttpServletRequest  request){
-        //校验前端传的参数是否为空
-        if (spaceAddRequest==null){
-            log.warn("前端传来的参数为空");
-            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数为空");
-        }
+
         Boolean b = spaceService.addSpace(spaceAddRequest, request);
         return ResultUtil.success(b);
     }
+
     @AuthType(userType = UserConstant.USER)
     @PostMapping("/edit")
     public BaseResponse<Boolean> editSpace(SpaceEditRequest spaceEditRequest, HttpServletRequest  request){
@@ -55,8 +52,13 @@ public class SpaceController {
     }
     @AuthType(userType = UserConstant.USER)
     @PostMapping("/delete")
-    public BaseResponse<Boolean> deleteSpace(DeleteRequest deleteRequest,HttpServletRequest request){
-        return ResultUtil.success(true);
+    public BaseResponse<Long> deleteSpace(DeleteRequest deleteRequest,HttpServletRequest request){
+        if(deleteRequest==null){
+            log.warn("前端传来的参数为空");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"参数为空");
+        }
+        Long l = spaceService.deleteSpaceById(deleteRequest, request);
+        return ResultUtil.success(l);
     }
 
 }

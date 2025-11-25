@@ -1,13 +1,16 @@
 package com.zhao.zhaopicturebacked.utils;
 
 import cn.hutool.core.util.ObjUtil;
-import cn.hutool.crypto.SecureUtil;
+
 import cn.hutool.json.JSONUtil;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
+import com.zhao.zhaopicturebacked.model.UserVO;
+import com.zhao.zhaopicturebacked.task.SpringContextHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.annotation.Around;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import javax.servlet.http.Cookie;
@@ -73,6 +76,20 @@ public class TokenUtil {
 //
 //        return bean;
 //    }
+
+
+    public static UserVO getLoginUserVOFromCookie(HttpServletRequest request){
+        StringRedisTemplate stringRedisTemplate = SpringContextHolder.getBean(StringRedisTemplate.class);
+        //先从redis拿到登录用户的VO信息
+        String tokenFromCookie = TokenUtil.getTokenFromCookie(request);
+        String loginUserVOJson = stringRedisTemplate.opsForValue().get(tokenFromCookie);
+        UserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, UserVO.class);
+        if (ObjUtil.isEmpty(loginUserVO)){
+            log.info("没有找到用户信息");
+            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"没有找到用户信息");
+        }
+        return loginUserVO;
+    }
 
 
 
