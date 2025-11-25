@@ -6,6 +6,7 @@
 
     <resultMap id="BaseResultMap" type="com.zhao.zhaopicturebacked.domain.Picture">
             <id property="id" column="id" jdbcType="BIGINT"/>
+            <result property="spaceId" column="space_id" jdbcType="BIGINT"/>
             <result property="pUrl" column="p_url" jdbcType="VARCHAR"/>
             <result property="thumbnailUrl" column="thumbnail_url" jdbcType="VARCHAR"/>
             <result property="pName" column="p_name" jdbcType="VARCHAR"/>
@@ -35,6 +36,6 @@
         p_scale,p_format,user_id,
         create_time,edit_time,update_time,
         is_delete,audit_status,audit_msg,
-        auditor_id,audit_time,thumbnail_url
+        auditor_id,audit_time,thumbnail_url,space_id
     </sql>
 </mapper>
