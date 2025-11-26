@@ -109,7 +109,7 @@ public class PictureController {
      */
     @PostMapping("/upload/url")
     @AuthType(userType = UserConstant.USER)
-    public BaseResponse<PictureVO> uploadPictureByUrl(PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
+    public BaseResponse<PictureVO> uploadPictureByUrl(@RequestBody PictureUploadRequest pictureUploadRequest,HttpServletRequest request) {
         UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
 
         Long userId = loginUserVO.getId();
@@ -127,7 +127,7 @@ public class PictureController {
 
     @PostMapping("/upload/batch")
     @AuthType(userType = UserConstant.ADMIN)
-    public BaseResponse<Integer> uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, HttpServletRequest request, HttpServletResponse response) {
+    public BaseResponse<Integer> uploadPictureByBatch(@RequestBody PictureUploadByBatchRequest pictureUploadByBatchRequest, HttpServletRequest request, HttpServletResponse response) {
 
         UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
 
@@ -169,21 +169,21 @@ public class PictureController {
         String key = getCacheKey(pictureQueryRequest);
         Page<PictureVO> pictureVOPage = null;
         //查找Caffeine缓存
-//        String cache = caffeienCacheStrategy.getCache(key);
-//        if (cache != null){
-//            log.info("从Caffeine缓存里获取数据成功");
-//            pictureVOPage = JSONUtil.toBean(cache,new TypeReference<Page<PictureVO>>() {}, true);
-//            return ResultUtil.success(pictureVOPage);
-//        }
-//        //redis查找缓存
-//        cache = redisCacheStrategy.getCache(key);
-//        if(cache != null){
-//            log.info("从redis里获取数据成功");
-//            pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-//            //将缓存写入Caffeine缓存
-//            caffeienCacheStrategy.setCache(key,cache);
-//            return ResultUtil.success(pictureVOPage);
-//        }
+        String cache = caffeienCacheStrategy.getCache(key);
+        if (cache != null){
+            log.info("从Caffeine缓存里获取数据成功");
+            pictureVOPage = JSONUtil.toBean(cache,new TypeReference<Page<PictureVO>>() {}, true);
+            return ResultUtil.success(pictureVOPage);
+        }
+        //redis查找缓存
+        cache = redisCacheStrategy.getCache(key);
+        if(cache != null){
+            log.info("从redis里获取数据成功");
+            pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+            //将缓存写入Caffeine缓存
+            caffeienCacheStrategy.setCache(key,cache);
+            return ResultUtil.success(pictureVOPage);
+        }
 
         //锁可以再细一点，查询不同的分页用的锁也不同
         String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
@@ -198,21 +198,21 @@ public class PictureController {
                 return ResultUtil.success(pictureVOPage);
             }
 
-//            //抢到了锁之后，再次查询缓存
-//            cache = caffeienCacheStrategy.getCache(key);
-//            if (cache != null){
-//                log.info("从Caffeine缓存里获取数据成功");
-//                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-//                return ResultUtil.success(pictureVOPage);
-//            }
-//            cache = redisCacheStrategy.getCache(key);
-//            if(cache != null){
-//                log.info("从redis里获取数据成功");
-//                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-//                //将缓存写入Caffeine缓存
-//                caffeienCacheStrategy.setCache(key,cache);
-//                return ResultUtil.success(pictureVOPage);
-//            }
+            //抢到了锁之后，再次查询缓存
+            cache = caffeienCacheStrategy.getCache(key);
+            if (cache != null){
+                log.info("从Caffeine缓存里获取数据成功");
+                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+                return ResultUtil.success(pictureVOPage);
+            }
+            cache = redisCacheStrategy.getCache(key);
+            if(cache != null){
+                log.info("从redis里获取数据成功");
+                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+                //将缓存写入Caffeine缓存
+                caffeienCacheStrategy.setCache(key,cache);
+                return ResultUtil.success(pictureVOPage);
+            }
             //如果还是没有缓存，就需要查数据库了
             Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
             //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
@@ -271,7 +271,7 @@ public class PictureController {
      * @param pictureQueryRequest
      * @return
      */
-    @PostMapping("/page/select/admin")
+    @PostMapping("/select/admin")
     @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<Page<Picture>> selectAdmin(@RequestBody PictureQueryRequest pictureQueryRequest){
 
@@ -318,9 +318,7 @@ public class PictureController {
     @PostMapping("/audit/admin")
     @AuthType(userType = UserConstant.ADMIN)
     public BaseResponse<Boolean> auditPicture(@RequestBody PictureAuditRequest pictureAuditRequest, HttpServletRequest request){
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
         pictureService.auditPicture(pictureAuditRequest,loginUserVO);
         return ResultUtil.success(true);
     }

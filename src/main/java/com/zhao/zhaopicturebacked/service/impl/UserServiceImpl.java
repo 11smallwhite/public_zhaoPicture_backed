@@ -9,13 +9,20 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zhao.zhaopicturebacked.domain.User;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.model.UserVO;
+import com.zhao.zhaopicturebacked.request.DeleteRequest;
+import com.zhao.zhaopicturebacked.request.user.UserEditRequest;
+import com.zhao.zhaopicturebacked.request.user.UserLoginRequest;
+import com.zhao.zhaopicturebacked.request.user.UserQueryRequest;
+import com.zhao.zhaopicturebacked.request.user.UserRegisterRequest;
 import com.zhao.zhaopicturebacked.service.UserService;
 import com.zhao.zhaopicturebacked.mapper.UserMapper;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
+import com.zhao.zhaopicturebacked.utils.TokenUtil;
 import com.zhao.zhaopicturebacked.utils.UserUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 import java.util.List;
 
@@ -32,11 +39,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     /**
      * 用户注册
-     * @param account
-     * @param password
+     * @param userRegisterRequest
      */
     @Override
-    public Long userRegister(String account, String password, String checkPassword) {
+    public Long userRegister(UserRegisterRequest userRegisterRequest) {
+        String account = userRegisterRequest.getUserAccount();
+        String password = userRegisterRequest.getUserPassword();
+        String checkPassword = userRegisterRequest.getCheckPassword();
+
+
+
         //1.校验参数是否为空
         if (StrUtil.isAllBlank(account,password,checkPassword)){
             log.info("账号或密码为空");
@@ -75,7 +87,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public User userLogin(String account, String password) {
+    public User userLogin(UserLoginRequest userLoginRequest) {
+        String account = userLoginRequest.getUserAccount();
+        String password = userLoginRequest.getUserPassword();
+
         //1.校验参数是否为空
         if (StrUtil.isAllBlank(account,password)){
             log.info("有参数为空");
@@ -101,7 +116,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
 
     @Override
-    public UserVO userEdit(Long id,String userName, String userIntroduction, String userAvatar, User loginUser) {
+    public UserVO userEdit(UserEditRequest userEditRequest, HttpServletRequest  request) {
+        UserVO loginUser = TokenUtil.getLoginUserVOFromCookie(request);
+        Long id = userEditRequest.getId();
+        String userName = userEditRequest.getUserName();
+        String userIntroduction = userEditRequest.getUserIntroduction();
+        String userAvatar = userEditRequest.getUserAvatar();
+
         //1.校验id是否为空
         if (ObjUtil.isEmpty(id)){
             log.info("id为空，无法更新");
@@ -133,16 +154,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public List<User> select(Long id, String userAccount, String userName, String userIntrodution,String sortField,String sortOrder) {
-        //1.构造查询条件
-        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
-        if (id>0){
-            userQueryWrapper.eq("id",id);
-        }
-        userQueryWrapper.eq(ObjUtil.isNotEmpty(userAccount),"user_account",userAccount);
-        userQueryWrapper.like("user_name",userName);
-        userQueryWrapper.like("user_introduction",userIntrodution);
-        userQueryWrapper.orderBy(ObjUtil.isNotEmpty(sortField),sortOrder.equals("asc"),sortField);
+    public List<User> select(UserQueryRequest userQueryRequest) {
+
+        QueryWrapper<User> userQueryWrapper = getUserQueryWrapper(userQueryRequest);
+
         //2.根据查询条件进行list查询
         List<User> userList = this.list(userQueryWrapper);
         if (ObjUtil.isEmpty(userList)){
@@ -154,19 +169,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Page<User> selectPage(Long id, String userAccount, String userName, String userIntrodution,String sortField,String sortOrder, Integer pageNum, Integer pageSize) {
+    public Page<User> selectPage(UserQueryRequest userQueryRequest) {
+        QueryWrapper<User> userQueryWrapper = getUserQueryWrapper(userQueryRequest);
 
-        //1.构造查询条件
-        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
-        userQueryWrapper.eq(ObjUtil.isNotNull(id),"id",id);
-        userQueryWrapper.eq(ObjUtil.isNotEmpty(userAccount),"user_account",userAccount);
-        userQueryWrapper.like(ObjUtil.isNotNull(userName),"user_name",userName);
-        userQueryWrapper.like(ObjUtil.isNotNull(userIntrodution),"user_introduction",userIntrodution);
-        if (ObjUtil.isNull(sortOrder)){
-            sortOrder = "asc";
-        }
-        String s = convertFieldToColumn(sortField);
-        userQueryWrapper.orderBy(ObjUtil.isNotEmpty(sortField),sortOrder.equals("asc"),s);
+        Integer pageNum = userQueryRequest.getPageNum();
+        Integer pageSize = userQueryRequest.getPageSize();
         //2.根据查询条件进行page查询
         Page<User> userPage = this.page(new Page<>(pageNum, pageSize), userQueryWrapper);
         if (ObjUtil.isEmpty(userPage)){
@@ -176,15 +183,38 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return userPage;
     }
 
+    private QueryWrapper<User> getUserQueryWrapper(UserQueryRequest userQueryRequest) {
+        Long id = userQueryRequest.getId();
+        String userAccount = userQueryRequest.getUserAccount();
+        String userName = userQueryRequest.getUserName();
+        String userIntroduction = userQueryRequest.getUserIntroduction();
+        String sortField = userQueryRequest.getSortField();
+        String sortOrder = userQueryRequest.getSortOrder();
+
+
+        //1.构造查询条件
+        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
+        userQueryWrapper.eq(ObjUtil.isNotNull(id),"id",id);
+        userQueryWrapper.eq(ObjUtil.isNotEmpty(userAccount),"user_account",userAccount);
+        userQueryWrapper.like(ObjUtil.isNotNull(userName),"user_name",userName);
+        userQueryWrapper.like(ObjUtil.isNotNull(userIntroduction),"user_introduction",userIntroduction);
+        if (ObjUtil.isNull(sortOrder)){
+            sortOrder = "asc";
+        }
+        String s = convertFieldToColumn(sortField);
+        userQueryWrapper.orderBy(ObjUtil.isNotEmpty(sortField),sortOrder.equals("asc"),s);
+        return userQueryWrapper;
+    }
+
     @Override
-    public Long userDelete(Long id) {
+    public Long userDelete(DeleteRequest deleteRequest) {
+        Long id = deleteRequest.getId();
         //1.校验id是否为空
         if (ObjUtil.isEmpty(id)||id<=0){
             log.info("id错误，无法删除");
             ThrowUtil.throwBusinessException(CodeEnum.NULL,"id错误");
         }
         //2.删除用户
-        QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
         boolean delete = this.removeById(id);
         if (!delete){
             log.info("删除用户失败,id不存在");

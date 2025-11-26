@@ -22,5 +22,5 @@ public interface PictureService extends IService<Picture> {
     Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest);
     PictureVO editPicture(PictureEditRequest pictureEditRequest,UserVO loginUserVO);
     PictureVO getPictureVOById(Long id);
-    void auditPicture(PictureAuditRequest pictureAuditRequest, LoginUserVO loginUserVO);
+    void auditPicture(PictureAuditRequest pictureAuditRequest, UserVO loginUserVO);
 }

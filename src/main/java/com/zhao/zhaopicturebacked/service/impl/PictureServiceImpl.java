@@ -384,7 +384,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * @param pictureAuditRequest
      */
     @Override
-    public void auditPicture(PictureAuditRequest pictureAuditRequest, LoginUserVO loginUserVO) {
+    public void auditPicture(PictureAuditRequest pictureAuditRequest, UserVO loginUserVO) {
         Long pictureId = pictureAuditRequest.getPictureId();
         Integer audioStatus = pictureAuditRequest.getAuditStatus();
         String audioMsg = pictureAuditRequest.getAuditMsg();

@@ -3,7 +3,9 @@ package com.zhao.zhaopicturebacked.service.impl;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zhao.zhaopicturebacked.annotation.AuthType;
 import com.zhao.zhaopicturebacked.common.BaseResponse;
@@ -18,6 +20,7 @@ import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
 import com.zhao.zhaopicturebacked.request.space.SpaceAddRequest;
 import com.zhao.zhaopicturebacked.request.space.SpaceEditRequest;
+import com.zhao.zhaopicturebacked.request.space.SpaceQueryRequest;
 import com.zhao.zhaopicturebacked.service.SpaceService;
 import com.zhao.zhaopicturebacked.mapper.SpaceMapper;
 import com.zhao.zhaopicturebacked.utils.ResultUtil;
@@ -88,7 +91,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setSpaceName(spaceName);
         space.setSpaceLevel(spaceLevel);
         validSpace(space,false);
-        //校验是不是图片创建者
+        //校验是不是空间创建者
         UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
         Space oldSpace = this.getById(id);
         if(ObjUtil.isEmpty(oldSpace)){
@@ -142,6 +145,68 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"删除空间失败");
         }
         return id;
+    }
+
+    @Override
+    public Page<Space> selectSpace(SpaceQueryRequest spaceQueryRequest) {
+
+        QueryWrapper<Space> spaceQueryWrapper = getSpaceQueryWrapper(spaceQueryRequest);
+
+        Integer pageNum = spaceQueryRequest.getPageNum();
+        Integer pageSize = spaceQueryRequest.getPageSize();
+        Page<Space> spacePage = this.page(new Page<>(pageNum, pageSize), spaceQueryWrapper);
+
+        return spacePage;
+    }
+
+    private QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryRequest spaceQueryRequest) {
+        Long id = spaceQueryRequest.getId();
+        String spaceName = spaceQueryRequest.getSpaceName();
+        int spaceLevel = spaceQueryRequest.getSpaceLevel();
+        Long userId = spaceQueryRequest.getUserId();
+        String sortField = spaceQueryRequest.getSortField();
+        String sortOrder = spaceQueryRequest.getSortOrder();
+
+
+        QueryWrapper<Space> spaceQueryWrapper = new QueryWrapper<>();
+        spaceQueryWrapper.eq(ObjUtil.isNotEmpty( id),"id",id);
+        spaceQueryWrapper.eq(ObjUtil.isNotEmpty( spaceName),"spaceName",spaceName);
+        spaceQueryWrapper.eq(ObjUtil.isNotEmpty( spaceLevel),"spaceLevel",spaceLevel);
+        spaceQueryWrapper.eq(ObjUtil.isNotEmpty( userId),"userId",userId);
+        String s = convertFieldToColumn(sortField);
+        spaceQueryWrapper.orderBy(ObjUtil.isNotNull(s), sortOrder.equals("asc"), s);
+        return spaceQueryWrapper;
+    }
+
+    private String convertFieldToColumn(String fieldName) {
+        if (ObjUtil.isEmpty(fieldName)) {
+            return null;
+        }
+
+        switch (fieldName) {
+            case "createTime":
+                return "create_time";
+            case "updateTime":
+                return "update_time";
+            case "editTime":
+                return "edit_time";
+            case "spaceName":
+                return "space_name";
+            case "spaceLevel":
+                return "space_level";
+            case "maxSize":
+                return "max_size";
+            case "maxCount":
+                return "max_count";
+            case "userId":
+                return "user_id";
+            case "totalSize":
+                return "total_size";
+            case "totalCount":
+                return "total_count";
+            default:
+                return fieldName; // 如果已经是数据库字段名，直接返回
+        }
     }
 
 
