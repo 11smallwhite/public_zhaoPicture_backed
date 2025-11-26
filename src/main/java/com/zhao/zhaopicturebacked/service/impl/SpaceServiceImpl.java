@@ -9,6 +9,7 @@ import com.zhao.zhaopicturebacked.annotation.AuthType;
 import com.zhao.zhaopicturebacked.common.BaseResponse;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.domain.Space;
+import com.zhao.zhaopicturebacked.domain.User;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
 import com.zhao.zhaopicturebacked.enums.SpaceLevelEnum;
 import com.zhao.zhaopicturebacked.model.LoginUserVO;
@@ -23,6 +24,7 @@ import com.zhao.zhaopicturebacked.utils.ResultUtil;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.TokenUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -201,6 +203,62 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         if (StrUtil.isNotBlank(spaceName) && spaceName.length() > 30) {
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"空间名称过长");
         }
+    }
+
+    @Override
+    public void validSpaceAndPicture(Space space, Picture picture) {
+        Long spaceId = picture.getSpaceId();
+        Long id = space.getId();
+        if (spaceId == null||id==null) {
+            log.error("空间id为空");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"空间id为空");
+        }
+        if (!spaceId.equals(id)) {
+            log.error("空间id不一致");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"空间id不一致");
+        }
+    }
+
+    @Override
+    public void validSpaceAndUserVO(Space space, UserVO userVO) {
+        User user = new User();
+        BeanUtils.copyProperties(userVO,user);
+        validSpaceAndUser(space,user);
+    }
+
+    @Override
+    public void validSpaceAndUser(Space space, User user) {
+        Long userId = space.getUserId();
+        Long id = user.getId();
+        if (userId == null||id==null) {
+            log.error("用户id为空");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"用户id为空");
+        }
+        if (!userId.equals(id)) {
+            log.error("用户id不一致");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"用户id不一致");
+        }
+    }
+
+    @Override
+    public void validUserAndPicture(User user, Picture picture) {
+        Long id = user.getId();
+        Long userId = picture.getUserId();
+        if (userId == null||id==null) {
+            log.error("用户id为空");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"用户id为空");
+        }
+        if (!userId.equals(id)&&user.getUserType()!=1) {
+            log.error("用户对这张图片无权限");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"用户对这张图片无权限");
+        }
+    }
+
+    @Override
+    public void validUserVOAndPicture(UserVO userVO, Picture picture) {
+        User user = new User();
+        BeanUtils.copyProperties(userVO,user);
+        validUserAndPicture(user,picture);
     }
 
 

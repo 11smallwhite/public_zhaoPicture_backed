@@ -20,7 +20,7 @@ public interface PictureService extends IService<Picture> {
     int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, UserVO loginUserVO);
     Long deletePicture(DeleteRequest deleteRequest, UserVO loginUserVO);
     Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest);
-    PictureVO editPicture(PictureEditRequest pictureEditRequest,LoginUserVO loginUserVO);
+    PictureVO editPicture(PictureEditRequest pictureEditRequest,UserVO loginUserVO);
     PictureVO getPictureVOById(Long id);
     void auditPicture(PictureAuditRequest pictureAuditRequest, LoginUserVO loginUserVO);
 }

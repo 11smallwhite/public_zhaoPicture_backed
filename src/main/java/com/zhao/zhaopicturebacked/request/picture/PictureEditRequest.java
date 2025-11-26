@@ -18,4 +18,6 @@ public class PictureEditRequest implements Serializable {
     private String pCategory;
     @JsonProperty("pTags")
     private List<String> pTags;
+
+    private Long spaceId;
 }

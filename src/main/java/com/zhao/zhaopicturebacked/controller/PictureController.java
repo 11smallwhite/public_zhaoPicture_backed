@@ -29,6 +29,8 @@ import com.zhao.zhaopicturebacked.service.UserService;
 import com.zhao.zhaopicturebacked.service.impl.PictureServiceImpl;
 import com.zhao.zhaopicturebacked.utils.*;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -68,6 +70,10 @@ public class PictureController {
 
     @Autowired
     private PictureServiceImpl pictureServiceImpl;
+
+
+    @Resource
+    private RedissonClient redissonClient;
 
 
 
@@ -178,43 +184,19 @@ public class PictureController {
             caffeienCacheStrategy.setCache(key,cache);
             return ResultUtil.success(pictureVOPage);
         }
+
         //锁可以再细一点，查询不同的分页用的锁也不同
         String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
         String lockKeyMd5 = DigestUtils.md5DigestAsHex(jsonStr.getBytes(StandardCharsets.UTF_8));
-        String lock = String.format("zhaopicture:controller:select_picture:%s:lock",lockKeyMd5);
-        String lockValue =  UUID.randomUUID().toString();
-        long timeout = 30;
-        //重试五次
-        int maxRetry = 5;
-        //重试间隔时间1秒
-        long retryInterval = 1000;
-        //重试计数
-        int retryCount = 0;
+        String lockkey = String.format("zhaopicture:controller:select_picture:%s:lock",lockKeyMd5);
 
-        // 创建一个单线程的定时任务执行器，用于续期
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        Boolean success = false;
-        ScheduledFuture<?> renewalTask = null;
+        RLock lock = redissonClient.getLock(lockkey);
         try{
-            //使用重试机制抢锁
-
-            while(retryCount < maxRetry && !success){
-                success = stringRedisTemplate.opsForValue().setIfAbsent(lock,lockValue, timeout, TimeUnit.SECONDS);
-                if(Boolean.FALSE.equals(success)){
-                    //如果锁被其他线程占用，则等待重试
-                    Thread.sleep(retryInterval);
-                    retryCount++;
-                }
+            //如果获取锁失败则返回
+            if(!lock.tryLock(10,-1,TimeUnit.SECONDS)){
+                log.info("获取锁失败");
+                return ResultUtil.success(pictureVOPage);
             }
-            //抢到锁后，先开启续期机制
-            renewalTask = scheduler.scheduleAtFixedRate(() -> {
-                // 定时执行续期任务
-                //保险机制，先进行判断锁是不是自己的
-                if(lockValue.equals(stringRedisTemplate.opsForValue().get(lock))){
-                    stringRedisTemplate.expire(lock, 30, TimeUnit.SECONDS);
-                    log.info("锁续期成功");
-                }
-            }, 10, 10, TimeUnit.SECONDS);//从现在开始，再过10秒执行第一次任务，之后每隔10秒执行一次任务
 
             //抢到了锁之后，再次查询缓存
             cache = caffeienCacheStrategy.getCache(key);
@@ -236,6 +218,7 @@ public class PictureController {
             //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
             List<Picture> pictureList = picturePage.getRecords();
             if(pictureList.size()==0 ){
+                log.info("缓存空值");
                 caffeienCacheStrategy.setCache(key,JSONUtil.toJsonStr(new Page<PictureVO>()));
                 redisCacheStrategy.setCache(key,JSONUtil.toJsonStr(new Page<PictureVO>()),60*15,TimeUnit.SECONDS);
                 return ResultUtil.success(new Page<PictureVO>());
@@ -254,10 +237,9 @@ public class PictureController {
             pictureVOPage.setRecords(pictureVOList);
             //给Caffeine缓存数据
             cache = JSONUtil.toJsonStr(pictureVOPage);
-            log.info("将数据写入Caffeine缓存");
+            log.info("缓存数据");
             caffeienCacheStrategy.setCache(key, cache);
             //给redis设置缓存,并设置缓存过期时间
-            log.info("将数据缓存进redis");
             redisCacheStrategy.setCache(key, cache, 60*60, TimeUnit.SECONDS);
 
         }catch (Exception e){
@@ -265,16 +247,11 @@ public class PictureController {
             ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"系统错误");
         }finally {
             //要确保是自己的锁才释放，获取锁失败的人不能释放
-            if(success){
-                stringRedisTemplate.delete(lock);
+            if(lock.isHeldByCurrentThread()){
+                log.info("线程:{},unlock",Thread.currentThread());
+                lock.unlock();
             }
-            if(renewalTask!=null){
-                renewalTask.cancel(true);
-            }
-            // 关闭定时任务执行器
-            if (scheduler != null && !scheduler.isShutdown()) {
-                scheduler.shutdown();
-            }
+
         }
         return ResultUtil.success(pictureVOPage,"查询成功");
     }
@@ -314,9 +291,7 @@ public class PictureController {
     @PostMapping("/edit")
     @AuthType(userType = UserConstant.USER)
     public BaseResponse<PictureVO> editPicture(@RequestBody PictureEditRequest pictureEditRequest,HttpServletRequest request){
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
         PictureVO pictureVO = pictureService.editPicture(pictureEditRequest, loginUserVO);
         return ResultUtil.success(pictureVO);
     }

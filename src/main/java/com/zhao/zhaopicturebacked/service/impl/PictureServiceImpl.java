@@ -246,6 +246,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Override
     public Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest) {
+        Integer pageNum = pictureQueryRequest.getPageNum();
+        Integer pageSize = pictureQueryRequest.getPageSize();
+        QueryWrapper<Picture> pictureQueryWrapper = getQueryWrapperFromQueryRequest(pictureQueryRequest);
+        Page<Picture> picturePage = this.page(new Page<>(pageNum, pageSize), pictureQueryWrapper);
+        return picturePage;
+    }
+
+    public QueryWrapper<Picture> getQueryWrapperFromQueryRequest(PictureQueryRequest pictureQueryRequest) {
         Long id = pictureQueryRequest.getId();
         Long userId = pictureQueryRequest.getUserId();
         String searchText = pictureQueryRequest.getSearchText();
@@ -259,8 +267,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Long auditId = pictureQueryRequest.getAuditId();
         String sortField = pictureQueryRequest.getSortField();
         String sortOrder = pictureQueryRequest.getSortOrder();
-        Integer pageNum = pictureQueryRequest.getPageNum();
-        Integer pageSize = pictureQueryRequest.getPageSize();
+
 
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
         if (id!=null){
@@ -278,19 +285,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 pictureQueryWrapper.like( ObjUtil.isNotEmpty( tag),"p_tags", "\""+tag+"\"");
             }
         }
-
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pSize)&&pSize>0,"p_size", pSize);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pWidth)&&pWidth>0,"p_width", pWidth);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pHeight)&&pHeight>0,"p_height", pHeight);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pScale)&&pScale>0,"p_scale", pScale);
-
         pictureQueryWrapper.eq(ObjUtil.isNotEmpty(auditStatus),"audit_status", auditStatus);
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(auditId)&&auditId>0,"audit_id", auditId);
         String s = convertFieldToColumn(sortField);
         pictureQueryWrapper.orderBy(ObjUtil.isNotNull(s), sortOrder.equals("asc"), s);
-        Page<Picture> picturePage = this.page(new Page<>(pageNum, pageSize), pictureQueryWrapper);
-        return picturePage;
+        return pictureQueryWrapper;
     }
+
+
 
     /**
      * 编辑图片
@@ -299,37 +305,38 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * @return
      */
     @Override
-    public PictureVO editPicture(PictureEditRequest pictureEditRequest, LoginUserVO loginUserVO) {
-        Long id = pictureEditRequest.getId();
-        String pName = pictureEditRequest.getPName();
-        String pIntroduction = pictureEditRequest.getPIntroduction();
-        String pCategory = pictureEditRequest.getPCategory();
-        List<String> pTags = pictureEditRequest.getPTags();
-        if(ObjUtil.isEmpty(id)){
+    public PictureVO editPicture(PictureEditRequest pictureEditRequest, UserVO loginUserVO) {
+        Picture picture = new Picture();
+        picture = copyPictureFromRequest(picture,pictureEditRequest);
+
+        //先校验图片本身存不存在
+        Long id = picture.getId();
+        if(ObjUtil.isEmpty( id)){
             log.warn("id参数为空");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id参数为空");
         }
-        //1.查看图片是否存在
         Picture oldPicture = this.getById(id);
         if(ObjUtil.isEmpty(oldPicture)){
             log.warn("id对应的图片不存在");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id对应的图片不存在");
         }
+        //校验用户有无权限修改这张图片
         Long userId = oldPicture.getUserId();
-        //校验是否有权限编辑图片
-        if(!userId.equals(loginUserVO.getId()) && loginUserVO.getUserType()!=1){
-            log.warn("用户没有权限编辑图片");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
+        spaceService.validUserVOAndPicture(loginUserVO, oldPicture);
+
+        //如果操作的是空间里的图片,还得额外校验
+        Long spaceId = picture.getSpaceId();
+        Space space = null;
+        if(ObjUtil.isNotEmpty(spaceId)){
+            space = spaceService.getById(spaceId);
+            spaceService.validSpaceAndPicture(space,picture);
+            spaceService.validSpaceAndUserVO(space,loginUserVO);
         }
+
+
         //更新图片
-        Picture picture = new Picture();
-        picture.setId(id);
-        picture.setpName(pName);
-        picture.setpIntroduction(pIntroduction);
-        picture.setpCategory(pCategory);
-        String tagsJson = JSONUtil.toJsonStr(pTags);
-        picture.setpTags(tagsJson);
-        if (loginUserVO.getUserType()== UserConstant.ADMIN){
+
+        if (loginUserVO.getUserType()== UserConstant.ADMIN||ObjUtil.isNotEmpty(spaceId)){
             picture.setAuditorId(loginUserVO.getId());
             picture.setAuditTime(new Date());
             picture.setAuditMsg("审核通过");
@@ -345,6 +352,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         PictureVO pictureVO = getPictureVOByPicture(oldPicture);
 
         return pictureVO;
+    }
+
+    public Picture copyPictureFromRequest(Picture picture,Object request) {
+        Class<?> clazz = request.getClass();
+        if(clazz == PictureEditRequest.class){
+            List<String> pTags = ((PictureEditRequest) request).getPTags();
+            String tagsJson = JSONUtil.toJsonStr(pTags);
+            picture.setpTags(tagsJson);
+        }
+
+        BeanUtils.copyProperties(picture,request);
+        return picture;
     }
 
     /**
