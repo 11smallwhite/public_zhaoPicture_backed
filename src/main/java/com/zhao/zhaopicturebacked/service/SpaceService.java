@@ -1,5 +1,6 @@
 package com.zhao.zhaopicturebacked.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhao.zhaopicturebacked.domain.Picture;
 import com.zhao.zhaopicturebacked.domain.Space;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -10,6 +11,7 @@ import com.zhao.zhaopicturebacked.model.UserVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
 import com.zhao.zhaopicturebacked.request.space.SpaceAddRequest;
 import com.zhao.zhaopicturebacked.request.space.SpaceEditRequest;
+import com.zhao.zhaopicturebacked.request.space.SpaceQueryRequest;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -23,6 +25,11 @@ public interface SpaceService extends IService<Space> {
     Boolean addSpace(SpaceAddRequest spaceAddRequest, HttpServletRequest  request);
     Boolean editSpace(SpaceEditRequest spaceEditRequest, HttpServletRequest request);
     Long deleteSpaceById(DeleteRequest deleteRequest, HttpServletRequest request);
+    Page<Space> selectSpace(SpaceQueryRequest spaceQueryRequest);
+
+
+
+
     //给空间填充Level参数
     void fillSpaceLevel(Space space);
     //给空间更新容量

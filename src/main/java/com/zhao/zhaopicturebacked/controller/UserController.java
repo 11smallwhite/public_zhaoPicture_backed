@@ -18,6 +18,7 @@ import com.zhao.zhaopicturebacked.request.user.UserQueryRequest;
 import com.zhao.zhaopicturebacked.request.user.UserRegisterRequest;
 import com.zhao.zhaopicturebacked.service.UserService;
 import com.zhao.zhaopicturebacked.utils.*;
+import org.apache.el.parser.Token;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -49,10 +50,8 @@ public class UserController {
      */
     @PostMapping("/register")
     public BaseResponse<Long> userRegister(@RequestBody UserRegisterRequest userRegisterRequest){
-        String account = userRegisterRequest.getUserAccount();
-        String password = userRegisterRequest.getUserPassword();
-        String checkPassword = userRegisterRequest.getCheckPassword();
-        Long id = userService.userRegister(account, password, checkPassword);
+
+        Long id = userService.userRegister(userRegisterRequest);
         log.info("用户注册成功：{}", id);
         return ResultUtil.success(id,"注册成功");
     }
@@ -61,15 +60,13 @@ public class UserController {
     /**
      * 用户登录
      * @param userLoginRequest
-     * @param request
      * @return
      */
     @PostMapping("/login")
-    public BaseResponse<LoginUserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletRequest request, HttpServletResponse response){
-        String userAccount = userLoginRequest.getUserAccount();
-        String userPassword = userLoginRequest.getUserPassword();
-        User user = userService.userLogin(userAccount, userPassword);
-        LoginUserVO loginUserVO = UserUtil.getLoginUserVOByUser(user);
+    public BaseResponse<UserVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletResponse response){
+
+        User user = userService.userLogin(userLoginRequest);
+        UserVO loginUserVO = UserUtil.getUserVOByUser(user);
         //1.获取token
         String token = TokenUtil.getToken(user.getId(), user.getUserAccount(), user.getUserName());
         //1.1删除旧的token
@@ -89,7 +86,7 @@ public class UserController {
     }
 
     @GetMapping("/get")
-    public BaseResponse<LoginUserVO> getLoginUser(HttpServletRequest request,HttpServletResponse response){
+    public BaseResponse<UserVO> getLoginUser(HttpServletRequest request,HttpServletResponse response){
         //1.从请求的Cookie里拿到token
         String token = TokenUtil.getTokenFromCookie(request);
         if (ObjUtil.isEmpty(token)){
@@ -106,7 +103,7 @@ public class UserController {
         stringRedisTemplate.expire(token,60*60, TimeUnit.SECONDS);
         //续期cookie
         TokenUtil.setTokenToCookie(token, response);
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
+        UserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, UserVO.class);
 
         return ResultUtil.success(loginUserVO,"获取用户信息成功");
 
@@ -137,18 +134,9 @@ public class UserController {
     @PostMapping("/edit")
     @AuthType(userType = 0)
     public BaseResponse<UserVO> userEdit(@RequestBody UserEditRequest userEditRequest, HttpServletRequest request){
-        //1.校验参数
-        Long id = userEditRequest.getId();
-        String userName = userEditRequest.getUserName();
-        String userIntroduction = userEditRequest.getUserIntroduction();
-        String userAvatar = userEditRequest.getUserAvatar();
-        //2.获取当前登录用户
-        String token = TokenUtil.getTokenFromCookie(request);
-        String loginUserVOJson = stringRedisTemplate.opsForValue().get(token);
-        LoginUserVO loginUserVO = JSONUtil.toBean(loginUserVOJson, LoginUserVO.class);
-        User loginUser = UserUtil.getUserByLoginUserVO(loginUserVO);
+        UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
         //3.调用service层方法
-        UserVO userVO = userService.userEdit(id, userName, userIntroduction, userAvatar, loginUser);
+        UserVO userVO = userService.userEdit(userEditRequest, request);
         return ResultUtil.success(userVO,"编辑成功");
     }
 
@@ -157,24 +145,16 @@ public class UserController {
      * @param userQueryRequest
      * @return
      */
-    @PostMapping("/page/select/query")
+    @PostMapping("/select")
     @AuthType(userType = 0)
     public BaseResponse<Page<UserVO>> select(@RequestBody UserQueryRequest userQueryRequest){
-        Long id = userQueryRequest.getId();
-        String userAccount = userQueryRequest.getUserAccount();
-        String userIntroduction = userQueryRequest.getUserIntroduction();
-        String userName = userQueryRequest.getUserName();
-        Integer pageNum = userQueryRequest.getPageNum();
-        Integer pageSize = userQueryRequest.getPageSize();
-        String sortField = userQueryRequest.getSortField();
 
-        String sortOrder = userQueryRequest.getSortOrder();
        
         //想要得到LoginUserVO的分页数据，就得先得到User的分页数据,也就是Page<User>,
         // 不能说 先得到List<User>，然后将其转换为List<LoginUserVO>,再转换为Page<LoginUserVO>，这样得到的Page<LoginUserVO>其实就是只有一页数据的Page，
         // 因为你new的Page对象，是没有进行过分页的，没有分页参数的
         // 如果你先通过分页查询得到Page<User>，那么你就可以这样子new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal())，这样才是真正的分页.
-        Page<User> userPage = userService.selectPage(id, userAccount,  userName, userIntroduction, sortField, sortOrder, pageNum, pageSize);
+        Page<User> userPage = userService.selectPage(userQueryRequest);
         List<UserVO> userVOList = userPage.getRecords().stream().map(user -> UserUtil.getUserVOByUser(user)).collect(Collectors.toList());
         // 构造返回的分页对象
         Page<UserVO> userVOPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
@@ -213,8 +193,8 @@ public class UserController {
     @PostMapping("/delete")
     @AuthType(userType = 1)
     public BaseResponse<Long> userDeleteById(@RequestBody DeleteRequest deleteRequest){
-        Long id = deleteRequest.getId();
-        Long delete = userService.userDelete(id);
+
+        Long delete = userService.userDelete(deleteRequest);
         return ResultUtil.success(delete,"删除成功");
     }
 

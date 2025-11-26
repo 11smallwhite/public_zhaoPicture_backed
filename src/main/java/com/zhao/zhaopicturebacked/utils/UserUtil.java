@@ -36,15 +36,7 @@ public class UserUtil {
         return user;
     }
 
-    public static LoginUserVO getLoginUserVOByUser(User user){
-        LoginUserVO loginUserVO = new LoginUserVO();
-        BeanUtils.copyProperties(user,loginUserVO);
-        if (ObjUtil.isEmpty(loginUserVO)){
-            log.info("User转换为LoginUserVO失败");
-            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"User转换为LoginUserVO失败");
-        }
-        return loginUserVO;
-    }
+
 
     public static UserVO getUserVOByUser(User user){
         UserVO userVO = new UserVO();
@@ -57,7 +49,7 @@ public class UserUtil {
     }
 
 
-    public static User getUserByLoginUserVO(LoginUserVO loginUserVO){
+    public static User getUserByLoginUserVO(UserVO loginUserVO){
         User user = new User();
         BeanUtils.copyProperties(loginUserVO,user);
         if (ObjUtil.isEmpty(user)){
