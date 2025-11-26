@@ -169,21 +169,21 @@ public class PictureController {
         String key = getCacheKey(pictureQueryRequest);
         Page<PictureVO> pictureVOPage = null;
         //查找Caffeine缓存
-        String cache = caffeienCacheStrategy.getCache(key);
-        if (cache != null){
-            log.info("从Caffeine缓存里获取数据成功");
-            pictureVOPage = JSONUtil.toBean(cache,new TypeReference<Page<PictureVO>>() {}, true);
-            return ResultUtil.success(pictureVOPage);
-        }
-        //redis查找缓存
-        cache = redisCacheStrategy.getCache(key);
-        if(cache != null){
-            log.info("从redis里获取数据成功");
-            pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-            //将缓存写入Caffeine缓存
-            caffeienCacheStrategy.setCache(key,cache);
-            return ResultUtil.success(pictureVOPage);
-        }
+//        String cache = caffeienCacheStrategy.getCache(key);
+//        if (cache != null){
+//            log.info("从Caffeine缓存里获取数据成功");
+//            pictureVOPage = JSONUtil.toBean(cache,new TypeReference<Page<PictureVO>>() {}, true);
+//            return ResultUtil.success(pictureVOPage);
+//        }
+//        //redis查找缓存
+//        cache = redisCacheStrategy.getCache(key);
+//        if(cache != null){
+//            log.info("从redis里获取数据成功");
+//            pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+//            //将缓存写入Caffeine缓存
+//            caffeienCacheStrategy.setCache(key,cache);
+//            return ResultUtil.success(pictureVOPage);
+//        }
 
         //锁可以再细一点，查询不同的分页用的锁也不同
         String jsonStr = JSONUtil.toJsonStr(pictureQueryRequest);
@@ -198,21 +198,21 @@ public class PictureController {
                 return ResultUtil.success(pictureVOPage);
             }
 
-            //抢到了锁之后，再次查询缓存
-            cache = caffeienCacheStrategy.getCache(key);
-            if (cache != null){
-                log.info("从Caffeine缓存里获取数据成功");
-                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-                return ResultUtil.success(pictureVOPage);
-            }
-            cache = redisCacheStrategy.getCache(key);
-            if(cache != null){
-                log.info("从redis里获取数据成功");
-                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
-                //将缓存写入Caffeine缓存
-                caffeienCacheStrategy.setCache(key,cache);
-                return ResultUtil.success(pictureVOPage);
-            }
+//            //抢到了锁之后，再次查询缓存
+//            cache = caffeienCacheStrategy.getCache(key);
+//            if (cache != null){
+//                log.info("从Caffeine缓存里获取数据成功");
+//                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+//                return ResultUtil.success(pictureVOPage);
+//            }
+//            cache = redisCacheStrategy.getCache(key);
+//            if(cache != null){
+//                log.info("从redis里获取数据成功");
+//                pictureVOPage = JSONUtil.toBean(cache, new TypeReference<Page<PictureVO>>() {}, true);
+//                //将缓存写入Caffeine缓存
+//                caffeienCacheStrategy.setCache(key,cache);
+//                return ResultUtil.success(pictureVOPage);
+//            }
             //如果还是没有缓存，就需要查数据库了
             Page<Picture> picturePage = pictureService.selectPage(pictureQueryRequest);
             //如果没查到数据，就直接返回空列表,同时也将空列表缓存进redis和Caffeine，防止用户恶意访问不存在的数据,使得数据库压力变大
@@ -236,11 +236,11 @@ public class PictureController {
             pictureVOPage = new Page<>(picturePage.getCurrent(), picturePage.getSize(), picturePage.getTotal());
             pictureVOPage.setRecords(pictureVOList);
             //给Caffeine缓存数据
-            cache = JSONUtil.toJsonStr(pictureVOPage);
-            log.info("缓存数据");
-            caffeienCacheStrategy.setCache(key, cache);
-            //给redis设置缓存,并设置缓存过期时间
-            redisCacheStrategy.setCache(key, cache, 60*60, TimeUnit.SECONDS);
+//            cache = JSONUtil.toJsonStr(pictureVOPage);
+//            log.info("缓存数据");
+//            caffeienCacheStrategy.setCache(key, cache);
+//            //给redis设置缓存,并设置缓存过期时间
+//            redisCacheStrategy.setCache(key, cache, 60*60, TimeUnit.SECONDS);
 
         }catch (Exception e){
             log.error("分页查询图片数据失败",e);

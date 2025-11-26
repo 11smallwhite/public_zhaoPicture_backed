@@ -209,15 +209,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             log.warn("id对应的数据不存在");
             ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"id对应数据不存在");
         }
-        Long userId = picture.getUserId();
-        Integer userType = loginUserVO.getUserType();
-        Long loginUserVOId = loginUserVO.getId();
-        //2.校验用户有无权限删除这张图片
-        if(userId!=loginUserVOId&&userType!=1){
-            log.warn("用户没有权限删除这张图片");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
-        }
 
+        spaceService.validUserVOAndPicture(loginUserVO,picture);
         boolean b = this.removeById(id);
         if (!b){
             log.warn("删除数据失败");
@@ -282,7 +275,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         if(pTags!=null){
             for (String tag : pTags){
-                pictureQueryWrapper.like( ObjUtil.isNotEmpty( tag),"p_tags", "\""+tag+"\"");
+                pictureQueryWrapper.like( ObjUtil.isNotEmpty(tag),"p_tags", "\""+tag+"\"");
             }
         }
         pictureQueryWrapper.eq( ObjUtil.isNotEmpty(pSize)&&pSize>0,"p_size", pSize);
