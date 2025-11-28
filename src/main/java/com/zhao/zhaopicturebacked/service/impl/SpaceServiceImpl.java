@@ -26,16 +26,23 @@ import com.zhao.zhaopicturebacked.mapper.SpaceMapper;
 import com.zhao.zhaopicturebacked.utils.ResultUtil;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import com.zhao.zhaopicturebacked.utils.TokenUtil;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
 * @author Vip
@@ -49,10 +56,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
 
     @Resource
-    private StringRedisTemplate stringRedisTemplate;
+    private RedissonClient redissonClient;
+
+    @Resource
+    private TransactionTemplate transactionTemplate;
 
 
-
+    private final ConcurrentHashMap<String, Object> lockHashMap = new ConcurrentHashMap<>();
     @Override
     public Boolean addSpace(SpaceAddRequest spaceAddRequest, HttpServletRequest request) {
         UserVO loginUserVO = TokenUtil.getLoginUserVOFromCookie(request);
@@ -63,21 +73,65 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setSpaceName(spaceName);
         space.setSpaceLevel(spaceLevel);
         validSpace(space,true);
-        //是否允许用户再创建空间
-        boolean b = checkUserAddSpace(loginUserVO);
-        if(!b){
-            log.warn("用户已创建空间");
-            ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"用户空间数量超过上限");
+        String lockKey = String.format("space:%s", loginUserVO.getId());
+        //String lock = String.format("space:%s", loginUserVO.getId()).intern();
+        //Object lock = lockHashMap.computeIfAbsent(lockKey, key -> new Object());
+        //todo 分布式场景下，由于synchronized无法跨jvm，所以依然会出现并发问题
+        RLock lock = redissonClient.getLock(lockKey);
+        try {
+            if(lock.tryLock(10,-1, TimeUnit.SECONDS)){
+                log.info("线程{}获取锁成功",Thread.currentThread());
+                //是否允许用户再创建空间
+                transactionTemplate.execute(transactionStatus -> {
+                    boolean b = checkUserAddSpace(loginUserVO);
+                    if(!b){
+                        log.warn("用户已创建空间");
+                        ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"用户空间数量超过上限");
+                    }
+                    //填写创建空间的信息
+                    fillSpaceLevel(space);
+                    space.setUserId(loginUserVO.getId());
+                    space.setEditTime(new Date());
+                    boolean save = this.save(space);
+                    if(!save){
+                        log.error("创建空间失败");
+                        ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"创建空间失败");
+                    }
+                    return Optional.ofNullable(save).orElse( false);
+                });
+            }
+        }catch (Exception e){
+            log.error("添加空间失败",e);
+            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"添加空间失败");
+        }finally {
+            if(lock.isHeldByCurrentThread()){
+                lock.unlock();
+            }
         }
-        //填写创建空间的信息
-        fillSpaceLevel(space);
-        space.setUserId(loginUserVO.getId());
-        space.setEditTime(new Date());
-        boolean save = this.save(space);
-        if(!save){
-             log.error("创建空间失败");
-             ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"创建空间失败");
-        }
+
+//        synchronized(lock){
+//            //是否允许用户再创建空间
+//            transactionTemplate.execute(transactionStatus -> {
+//                boolean b = checkUserAddSpace(loginUserVO);
+//                if(!b){
+//                    log.warn("用户已创建空间");
+//                    ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"用户空间数量超过上限");
+//                }
+//                //填写创建空间的信息
+//                fillSpaceLevel(space);
+//                space.setUserId(loginUserVO.getId());
+//                space.setEditTime(new Date());
+//                boolean save = this.save(space);
+//                if(!save){
+//                    log.error("创建空间失败");
+//                    ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"创建空间失败");
+//                }
+//                return Optional.ofNullable(save).orElse( false);
+//            });
+//
+//        }
+
+
         return true;
     }
 

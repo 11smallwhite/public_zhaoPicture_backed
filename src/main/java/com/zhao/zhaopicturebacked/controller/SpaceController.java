@@ -6,6 +6,8 @@ import com.zhao.zhaopicturebacked.common.BaseResponse;
 import com.zhao.zhaopicturebacked.common.UserConstant;
 import com.zhao.zhaopicturebacked.domain.Space;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
+import com.zhao.zhaopicturebacked.enums.SpaceLevelEnum;
+import com.zhao.zhaopicturebacked.model.SpaceLevel;
 import com.zhao.zhaopicturebacked.model.SpaceVO;
 import com.zhao.zhaopicturebacked.request.DeleteRequest;
 import com.zhao.zhaopicturebacked.request.space.SpaceAddRequest;
@@ -20,6 +22,9 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RequestMapping("/space")
 @ResponseBody
@@ -69,4 +74,18 @@ public class SpaceController {
         return ResultUtil.success(null);
     }
 
+
+    @GetMapping("/list/level")
+    public BaseResponse<List<SpaceLevel>> listSpaceLevel(){
+        List<SpaceLevel> spaceLevels = Arrays.stream(SpaceLevelEnum.values())
+                .map(spaceLevelEnum -> {
+                    long maxSize = spaceLevelEnum.getMaxSize();
+                    String levelName = spaceLevelEnum.getLevelName();
+                    long maxCount = spaceLevelEnum.getMaxCount();
+                    int code = spaceLevelEnum.getCode();
+                    return new SpaceLevel(code, levelName, maxCount, maxSize);
+                }).collect(Collectors.toList());
+
+        return ResultUtil.success(spaceLevels);
+    }
 }

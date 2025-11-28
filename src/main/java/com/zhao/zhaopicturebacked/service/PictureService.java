@@ -10,6 +10,8 @@ import com.zhao.zhaopicturebacked.request.DeleteRequest;
 import com.zhao.zhaopicturebacked.request.picture.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletRequest;
+
 /**
 * @author Vip
 * @description 针对表【picture(图片)】的数据库操作Service
@@ -20,6 +22,7 @@ public interface PictureService extends IService<Picture> {
     int uploadPictureByBatch(PictureUploadByBatchRequest pictureUploadByBatchRequest, UserVO loginUserVO);
     Long deletePicture(DeleteRequest deleteRequest, UserVO loginUserVO);
     Page<Picture> selectPage(PictureQueryRequest pictureQueryRequest);
+    Page<Picture> selectPageBySpace(PictureQueryRequest pictureQueryRequest, HttpServletRequest  request);
     PictureVO editPicture(PictureEditRequest pictureEditRequest,UserVO loginUserVO);
     PictureVO getPictureVOById(Long id);
     void auditPicture(PictureAuditRequest pictureAuditRequest, UserVO loginUserVO);

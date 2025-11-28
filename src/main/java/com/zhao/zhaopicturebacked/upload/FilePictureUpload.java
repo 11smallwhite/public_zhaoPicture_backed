@@ -12,6 +12,7 @@ import com.qcloud.cos.model.ciModel.persistence.ProcessResults;
 import com.zhao.zhaopicturebacked.cos.CosService;
 import com.zhao.zhaopicturebacked.cos.PictureInfoResult;
 import com.zhao.zhaopicturebacked.enums.CodeEnum;
+import com.zhao.zhaopicturebacked.request.picture.PictureUploadRequest;
 import com.zhao.zhaopicturebacked.utils.ThrowUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -65,12 +66,17 @@ public class FilePictureUpload extends PictureUploadTemplate{
 
 
     @Override
-    public String getKey(Object inputSource, Long userId) {
+    public String getKey(Object inputSource, Long userId, PictureUploadRequest pictureUploadRequest) {
         MultipartFile multipartFile = (MultipartFile) inputSource;
         String originalFilename = multipartFile.getOriginalFilename();
         String name = FileUtil.mainName(originalFilename);
         String suffix = FileUtil.getSuffix(originalFilename);
+        Long spaceId = pictureUploadRequest.getSpaceId();
         String key = String.format("/public/%s.%s.%s",userId,name,suffix);
+        if(spaceId!=null){
+            key = String.format("/%s/%s.%s.%s",spaceId,userId,name,suffix);
+        }
+
         return key;
     }
 

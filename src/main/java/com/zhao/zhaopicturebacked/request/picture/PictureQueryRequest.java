@@ -30,4 +30,7 @@ public class PictureQueryRequest extends PageRequest implements Serializable {
     private String sortField;
     private String sortOrder;
 
+    private Long spaceId;
+    private Boolean nullSpaceId;
+
 }

@@ -44,21 +44,22 @@ public abstract class PictureUploadTemplate {
 
 
 
-    public Picture uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, UserVO loginUserVO){
+    public Picture uploadPicture(Object inputSource, PictureUploadRequest pictureUploadRequest, UserVO loginUserVO,Picture oldPicture){
 
         Long pictureId = pictureUploadRequest.getId();
 
         Long userId = loginUserVO.getId();
 
+
+
+
         vailPicture(inputSource);
 
-        String key = getKey(inputSource, userId);
-
-
         Long spaceId = pictureUploadRequest.getSpaceId();
+
         //如果spaceId不为空，则证明是上传图片到空间，需要检查空间在数据库是否存在,并且只允许空间创建者上传图片
         Space space = null;
-        if(ObjUtil.isNotEmpty(pictureId)){
+        if(ObjUtil.isNotEmpty(spaceId)){
             space = spaceService.getById(spaceId);
             if(ObjUtil.isEmpty(space)){
                 log.warn("空间不存在");
@@ -68,7 +69,37 @@ public abstract class PictureUploadTemplate {
                 log.warn("不是空间创建者");
                 ThrowUtil.throwBusinessException(CodeEnum.NOT_AUTH,"无权限");
             }
+            if(ObjUtil.isNotEmpty(oldPicture)){
+                boolean update = spaceService.lambdaUpdate()
+                        .eq(Space::getId, spaceId)
+                        .setSql("total_size = total_size - " + oldPicture.getpSize())
+                        .setSql("total_count = total_count - 1")
+                        .update();
+                if (!update){
+                    log.warn("更新空间额度失败");
+                    ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"更新空间额度失败");
+                }
+            }
+
         }
+        //这里会有并发问题，如果用户在临界超额的时候，同时发送了多张图片，可能会出现超额情况
+        //但是如果要完全阻止这种并发问题的话，我们就得用上锁，并且要自己计算文件的大小，但是由于我们的上传图片的逻辑本身就挺复杂了，所以我们考虑从业务层面上优化
+        //单张图片最大才2M，即使超额了，问题也不大，所以我们可以只用业务代码进行一点限制，节省了开发成本
+        //todo 然后后续我们就使用其他策略来找出超额的情况进行定制处理
+        if(space.getTotalSize()>=space.getMaxCount()||space.getTotalCount()>=space.getMaxCount()){
+            log.warn("空间已满");
+            ThrowUtil.throwBusinessException(CodeEnum.PARAMES_ERROR,"空间已满");
+        }
+
+
+
+
+        String key = getKey(inputSource,userId,pictureUploadRequest);
+
+
+
+
+
 
 
         PictureInfoResult pictureInfoResult = UploadPicture(inputSource, key);
@@ -103,24 +134,25 @@ public abstract class PictureUploadTemplate {
 
         if (loginUserVO.getUserType()== UserConstant.ADMIN){
             fillAuditor(loginUserVO, picture);
-        }else if(ObjUtil.isNotEmpty(spaceId)){
-            //如果空间没超额
-            space = spaceService.spaceLevelelCheck(space, 1, size);
-            boolean b = spaceService.updateById(space);
-            if(!b){
-                log.warn("空间更新失败");
-                ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"空间更新失败");
-            }
+        }else if(ObjUtil.isNotEmpty(space)){
             fillAuditor(loginUserVO, picture);
-
         }else{
             picture.setAuditStatus(AuditStatusEnum.REVIEWING.getCode());
         }
         if(pictureId!=null){
             picture.setId(pictureId);
         }
+        //这里有缺陷，如果是不要旧图片，更新成新图片，则需要减去原来的图片大小，然后加上新的图片大小
+        boolean update = spaceService.lambdaUpdate()
+                .eq(Space::getId, spaceId)
+                .setSql("total_size = total_size + " + picture.getpSize())
+                .setSql("total_count = total_count + 1")
+                .update();
+        if(!update){
+            log.warn("更新空间额度失败");
+            ThrowUtil.throwBusinessException(CodeEnum.SYSTEM_ERROR,"更新空间额度失败");
+        }
         return picture;
-
     }
 
     private void fillAuditor(UserVO loginUserVO, Picture picture) {
@@ -133,7 +165,7 @@ public abstract class PictureUploadTemplate {
 
     public abstract void vailPicture(Object inputSource);
 
-    public abstract String getKey(Object inputSource,Long userId);
+    public abstract String getKey(Object inputSource,Long userId,PictureUploadRequest pictureUploadRequest);
 
     public abstract PictureInfoResult UploadPicture(Object inputSource,String key);
 

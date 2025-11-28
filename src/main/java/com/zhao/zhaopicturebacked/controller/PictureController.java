@@ -44,10 +44,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -74,6 +71,8 @@ public class PictureController {
 
     @Resource
     private RedissonClient redissonClient;
+
+
 
 
 
@@ -153,14 +152,14 @@ public class PictureController {
 
 
     /**
-     * 分页查询图片（用户可用）
+     * 分页查询图片（无登录可用）
      * @param pictureQueryRequest
      * @return
      */
     @PostMapping("/page/select/query")
-    //todo 暂时优化到这了
     public BaseResponse<Page<PictureVO>> select(@RequestBody PictureQueryRequest pictureQueryRequest,HttpServletRequest request){
 
+        pictureQueryRequest.setNullSpaceId( true);
         String servletPath = request.getServletPath();
         if(!servletPath.contains("admin")){
             pictureQueryRequest.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
@@ -255,6 +254,33 @@ public class PictureController {
         }
         return ResultUtil.success(pictureVOPage,"查询成功");
     }
+
+
+    /**
+     * 分页查询私有空间的图片
+     * @param pictureQueryRequest
+     * @return
+     */
+    @PostMapping("/page/select/query/space")
+    public BaseResponse<Page<Picture>> selectBySpace(@RequestBody PictureQueryRequest pictureQueryRequest,HttpServletRequest request){
+
+        pictureQueryRequest.setNullSpaceId( false);
+        String servletPath = request.getServletPath();
+        if(!servletPath.contains("admin")){
+            pictureQueryRequest.setAuditStatus(AuditStatusEnum.REVIEW_PASS.getCode());
+        }
+
+        //要查数据库了
+        Page<Picture> picturePage = pictureService.selectPageBySpace(pictureQueryRequest,request);
+
+
+        return ResultUtil.success(picturePage,"查询成功");
+    }
+
+
+
+
+
 
     //构造缓存Key
     private static String getCacheKey(PictureQueryRequest pictureQueryRequest) {
